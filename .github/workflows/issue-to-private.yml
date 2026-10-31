@@ -1,0 +1,70 @@
+name: Issue to private
+
+# Passes each new public issue to the private tracker as a high-priority issue.
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  pass-on:
+    if: vars.SYNC_CLIENT_ID != '' && github.event.issue.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync App token for flitagent-dev
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.SYNC_CLIENT_ID }}
+          private-key: ${{ secrets.SYNC_APP_KEY }}
+          owner: FlitAgent
+          repositories: flitagent-dev
+          permission-issues: write
+
+      - name: Create the private issue
+        id: create
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            // Same issue body format the private repo uses for issues forwarded from here.
+            const ZWSP = '​';
+            const QUOTE_LIMIT = 60000;
+            const TRUNCATED = '> … (truncated, see the public issue)';
+            const defuse = (text) => String(text).replace(/@/g, `@${ZWSP}`).replace(/#(?=\d)/g, `#${ZWSP}`);
+            const privateIssueBody = ({ number, url, title, body, user }) => {
+              const quoted = [defuse(String(title).replace(/\s*\r?\n\s*/g, ' ')), '', ...defuse(body || '').split(/\r?\n/)]
+                .map((l) => (l === '' ? '>' : `> ${l}`))
+                .join('\n');
+              const quote = quoted.length > QUOTE_LIMIT ? `${quoted.slice(0, QUOTE_LIMIT)}\n${TRUNCATED}` : quoted;
+              return `Public: FlitAgent/FlitAgent#${number}\n\n${defuse(`Reported by @${user} in ${url}`)}\n\n${quote}`;
+            };
+            const issue = context.payload.issue;
+            await github.rest.issues.create({
+              owner: 'FlitAgent',
+              repo: 'flitagent-dev',
+              title: issue.title,
+              labels: ['priority: high', 'from-public'],
+              body: privateIssueBody({
+                number: issue.number,
+                url: issue.html_url,
+                title: issue.title,
+                body: issue.body,
+                user: issue.user.login,
+              }),
+            });
+
+      - name: Thank the reporter
+        id: ack
+        if: success()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: 'Thanks for the report. It has been passed to the FlitAgent team; this issue will be updated when a fix ships in a release.',
+            });

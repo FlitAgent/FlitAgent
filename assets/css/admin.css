@@ -1,0 +1,1783 @@
+/*
+ * FlitAgent wp-admin screens (#137), loaded only on FlitAgent's own screens (Admin::enqueue), after tokens.css. Plain
+ * CSS, shipped as it is: there is no build step. No bundled fonts: the font tokens fall back to the system fonts
+ * wp-admin uses. One look with flitagent.com: light only, the tokens of @flit/design declared on the wrapper only
+ * (tokens.css), never on the document root. Everything sits inside .flitagent-wrap; WordPress chrome (admin menu,
+ * admin bar, screen options, help tabs, notices other code prints) keeps core's look.
+ *
+ * Sections: Components, Core markup, Screens, Settings, Connect screen, Setup guide, Wrapper (the order matters: a
+ * later rule wins over an earlier one of the same weight).
+ *
+ * Lucide glyphs are drawn as CSS masks (the data: URLs of the notices and the checkbox tick), so a glyph takes the
+ * colour of its text. They are only used where core renders the markup itself; the screens' own markup inlines SVG
+ * (Admin\Ui). The licence below must appear in all copies.
+ */
+
+/*! Lucide icons, https://lucide.dev (the glyphs below and the inline SVG in includes/Admin/Ui.php).
+
+ISC License
+
+Copyright (c) 2026 Lucide Icons and Contributors
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+---
+
+The following Lucide icons are derived from the Feather project:
+
+airplay, alert-circle, alert-octagon, alert-triangle, aperture, arrow-down-circle, arrow-down-left, arrow-down-right, arrow-down, arrow-left-circle, arrow-left, arrow-right-circle, arrow-right, arrow-up-circle, arrow-up-left, arrow-up-right, arrow-up, at-sign, calendar, cast, check, chevron-down, chevron-left, chevron-right, chevron-up, chevrons-down, chevrons-left, chevrons-right, chevrons-up, circle, clipboard, clock, code, columns, command, compass, corner-down-left, corner-down-right, corner-left-down, corner-left-up, corner-right-down, corner-right-up, corner-up-left, corner-up-right, crosshair, database, divide-circle, divide-square, dollar-sign, download, external-link, feather, frown, hash, headphones, help-circle, info, italic, key, layout, life-buoy, link-2, link, loader, lock, log-in, log-out, maximize, meh, minimize, minimize-2, minus-circle, minus-square, minus, monitor, moon, more-horizontal, more-vertical, move, music, navigation-2, navigation, octagon, pause-circle, percent, plus-circle, plus-square, plus, power, radio, rss, search, server, share, shopping-bag, sidebar, smartphone, smile, square, table-2, tablet, target, terminal, trash-2, trash, triangle, tv, type, upload, x-circle, x-octagon, x-square, x, zoom-in, zoom-out
+
+The MIT License (MIT) (for the icons listed above)
+
+Copyright (c) 2013-present Cole Bemis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+/* ==========================================================================
+ * Components
+ *
+ * The design language's component set that FlitAgent's own markup uses (Admin\Ui and the screens), inside
+ * .flitagent-wrap only.
+ * ========================================================================== */
+
+/*
+ * Page header, the same on every screen as on every board (e2e 2026-10-30, M6): the bird mark (30px), the wordmark
+ * and the Newsreader title at the boards' 28px (no token has it), with no rule below; the content follows 20px under
+ * it.
+ */
+.flitagent-wrap .flitagent-header {
+	display: flex;
+	align-items: center;
+	gap: var(--flit-space-3);
+	margin-bottom: var(--flit-space-5);
+	padding: 0;
+	border: 0;
+}
+
+.flitagent-wrap .flitagent-header h1 {
+	margin: 0;
+	padding: 0;
+	color: var(--flit-color-fg);
+	font-family: var(--flit-font-display);
+	font-size: 28px;
+	font-weight: var(--flit-font-weight-medium);
+	letter-spacing: -0.02em;
+	line-height: 1.2;
+}
+
+/* The mark is a full-colour illustration, shown as shipped: never recoloured. */
+.flitagent-wrap .flitagent-mark {
+	flex: none;
+	width: 30px;
+	height: 30px;
+	background: url(../images/flitagent-mark.svg) center/contain no-repeat;
+}
+
+.flitagent-wrap .flitagent-wordmark {
+	margin: 0;
+	color: var(--flit-color-fg-muted);
+	font-family: var(--flit-font-display);
+	font-size: var(--flit-font-size-sm);
+	font-weight: var(--flit-font-weight-medium);
+	line-height: var(--flit-line-height-sm);
+}
+
+/* Card: paper, hairline, 18px radius, soft shadow. Never nested. */
+.flitagent-wrap .flitagent-card {
+	margin: 0 0 var(--flit-space-6);
+	padding: var(--flit-space-6);
+	border: var(--flit-border-width-hairline) solid var(--flit-color-border);
+	border-radius: var(--flit-radius-xl);
+	background: var(--flit-color-surface);
+	box-shadow: var(--flit-shadow-card);
+}
+
+.flitagent-wrap .flitagent-card > :first-child {
+	margin-top: 0;
+}
+
+.flitagent-wrap .flitagent-card > :last-child {
+	margin-bottom: 0;
+}
+
+@media screen and (max-width: 600px) {
+	.flitagent-wrap .flitagent-card {
+		padding: var(--flit-space-4);
+	}
+}
+
+/*
+ * Status chip: pill, glyph plus the status word (A3: never colour alone). Roles follow the status mapping of the
+ * design language (Admin\Ui): the diagnostics warning and waiting are warning; connected and pass are success;
+ * not connected and fail are danger; skipped and anything else are neutral.
+ */
+.flitagent-wrap .flitagent-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--flit-space-1);
+	padding: 2px var(--flit-space-2);
+	border-radius: var(--flit-radius-full);
+	background: var(--flit-color-neutral-bg);
+	color: var(--flit-color-neutral-fg);
+	font-size: var(--flit-font-size-xs);
+	font-weight: var(--flit-font-weight-medium);
+	line-height: var(--flit-line-height-xs);
+	white-space: nowrap;
+}
+
+.flitagent-wrap .flitagent-chip.flitagent-chip--success {
+	background: var(--flit-color-success-bg);
+	color: var(--flit-color-success-fg);
+}
+
+.flitagent-wrap .flitagent-chip.flitagent-chip--warning {
+	background: var(--flit-color-warning-bg);
+	color: var(--flit-color-warning-fg);
+}
+
+.flitagent-wrap .flitagent-chip.flitagent-chip--danger {
+	background: var(--flit-color-danger-bg);
+	color: var(--flit-color-danger-fg);
+}
+
+.flitagent-wrap .flitagent-chip-icon {
+	flex: none;
+	width: 12px;
+	height: 12px;
+}
+
+/*
+ * Notice (FlitAgent's own; core notices other code prints keep core's look): 4px bar in the -icon colour, -bg
+ * fill, ink text, a glyph plus the sentence.
+ */
+.flitagent-wrap .flitagent-notice {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--flit-space-3);
+	margin: 0 0 var(--flit-space-4);
+	padding: var(--flit-space-3) var(--flit-space-4);
+	border: 0;
+	border-left: var(--flit-border-width-notice-bar) solid var(--flit-color-info-icon);
+	border-radius: var(--flit-radius-md);
+	background: var(--flit-color-info-bg);
+	box-shadow: none;
+	color: var(--flit-color-fg);
+}
+
+.flitagent-wrap .flitagent-notice::before {
+	content: "";
+	flex: none;
+	width: 20px;
+	height: 20px;
+	margin-top: 1px;
+	background: var(--flit-color-info-fg);
+	mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><path d='M12 16v-4'/><path d='M12 8h.01'/></svg>") center/contain no-repeat;
+}
+
+.flitagent-wrap .flitagent-notice p {
+	margin: 0;
+	padding: 0;
+}
+
+.flitagent-wrap .flitagent-notice.is-dismissible {
+	padding-right: var(--flit-space-10);
+}
+
+/* Core's notice class, the role and its glyph. */
+.flitagent-wrap .flitagent-notice.notice-success {
+	border-left-color: var(--flit-color-success-icon);
+	background: var(--flit-color-success-bg);
+}
+
+.flitagent-wrap .flitagent-notice.notice-success::before {
+	background: var(--flit-color-success-fg);
+	mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><path d='m9 12 2 2 4-4'/></svg>");
+}
+
+.flitagent-wrap .flitagent-notice.notice-warning {
+	border-left-color: var(--flit-color-warning-icon);
+	background: var(--flit-color-warning-bg);
+}
+
+.flitagent-wrap .flitagent-notice.notice-warning::before {
+	background: var(--flit-color-warning-fg);
+	mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'/><path d='M12 9v4'/><path d='M12 17h.01'/></svg>");
+}
+
+.flitagent-wrap .flitagent-notice.notice-error {
+	border-left-color: var(--flit-color-danger-icon);
+	background: var(--flit-color-danger-bg);
+}
+
+.flitagent-wrap .flitagent-notice.notice-error::before {
+	background: var(--flit-color-danger-fg);
+	mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><path d='m15 9-6 6'/><path d='m9 9 6 6'/></svg>");
+}
+
+/* A10: tables that cannot collapse scroll on their own. */
+.flitagent-wrap .flitagent-table-scroll {
+	overflow-x: auto;
+}
+
+/* ==========================================================================
+ * Core markup
+ *
+ * Core markup inside .flitagent-wrap takes the Flit look (the wp-admin rule): headings, links, code, buttons and
+ * inputs. Selectors start with the wrapper so they outrank core's `.wp-core-ui .button` and
+ * friends without !important, and never reach WordPress's own chrome.
+ * ========================================================================== */
+
+.flitagent-wrap h2,
+.flitagent-wrap h3,
+.flitagent-wrap h4 {
+	color: var(--flit-color-fg);
+	font-family: var(--flit-font-display);
+	font-weight: var(--flit-font-weight-medium);
+	letter-spacing: -0.02em;
+}
+
+.flitagent-wrap h2 {
+	margin: var(--flit-space-6) 0 var(--flit-space-3);
+	font-size: var(--flit-font-size-xl);
+	line-height: var(--flit-line-height-xl);
+}
+
+.flitagent-wrap h3 {
+	margin: var(--flit-space-5) 0 var(--flit-space-2);
+	font-size: var(--flit-font-size-lg);
+	line-height: var(--flit-line-height-lg);
+}
+
+.flitagent-wrap h4 {
+	margin: var(--flit-space-4) 0 var(--flit-space-2);
+	font-size: var(--flit-font-size-md);
+	line-height: var(--flit-line-height-md);
+}
+
+.flitagent-wrap p,
+.flitagent-wrap li {
+	font-size: var(--flit-font-size-base);
+	line-height: var(--flit-line-height-base);
+}
+
+.flitagent-wrap a {
+	color: var(--flit-color-link);
+	text-underline-offset: 0.15em;
+}
+
+.flitagent-wrap a:hover {
+	color: var(--flit-color-accent-hover);
+}
+
+.flitagent-wrap a:focus {
+	box-shadow: none;
+}
+
+.flitagent-wrap .description {
+	color: var(--flit-color-fg-muted);
+	font-size: var(--flit-font-size-sm);
+	font-style: normal;
+}
+
+/* Code: inline mono on the sunken surface; blocks wrap. */
+.flitagent-wrap code {
+	padding: 0 var(--flit-space-1);
+	border-radius: var(--flit-radius-sm);
+	background: var(--flit-color-surface-sunken);
+	color: var(--flit-color-fg);
+	font-family: var(--flit-font-mono);
+	font-size: var(--flit-font-mono-scale);
+	overflow-wrap: anywhere;
+}
+
+/* Buttons: pills. Secondary (core's .button) is outlined; primary is teal with paper text. 44px high. */
+.flitagent-wrap .button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--flit-space-2);
+	min-height: 44px;
+	margin: 0;
+	padding: 0 var(--flit-space-5);
+	border: var(--flit-border-width-hairline) solid var(--flit-color-border-strong);
+	border-radius: var(--flit-radius-full);
+	background: transparent;
+	box-shadow: none;
+	color: var(--flit-color-fg);
+	font-family: var(--flit-font-sans);
+	font-size: var(--flit-font-size-base);
+	font-weight: var(--flit-font-weight-medium);
+	line-height: var(--flit-line-height-base);
+	text-decoration: none;
+	transition: background-color var(--flit-duration-fast) var(--flit-ease-out);
+}
+
+.flitagent-wrap .button:hover,
+.flitagent-wrap .button:active {
+	border-color: var(--flit-color-border-strong);
+	background: var(--flit-color-surface-hover);
+	color: var(--flit-color-fg);
+}
+
+.flitagent-wrap .button:focus {
+	border-color: var(--flit-color-border-strong);
+	box-shadow: none;
+	color: var(--flit-color-fg);
+}
+
+.flitagent-wrap .button:disabled,
+.flitagent-wrap .button[aria-disabled=true] {
+	opacity: 0.6;
+}
+
+.flitagent-wrap .button-primary {
+	border-color: var(--flit-color-accent);
+	background: var(--flit-color-accent);
+	color: var(--flit-color-accent-fg);
+}
+
+.flitagent-wrap .button-primary:hover,
+.flitagent-wrap .button-primary:active,
+.flitagent-wrap .button-primary:focus {
+	border-color: var(--flit-color-accent-hover);
+	background: var(--flit-color-accent-hover);
+	color: var(--flit-color-accent-fg);
+}
+
+.flitagent-wrap .button-link {
+	min-height: 24px;
+	color: var(--flit-color-link);
+	font-size: var(--flit-font-size-sm);
+	text-decoration: underline;
+	text-underline-offset: 0.15em;
+}
+
+.flitagent-wrap .button-link:hover {
+	color: var(--flit-color-accent-hover);
+}
+
+.flitagent-wrap .button-link:focus {
+	box-shadow: none;
+}
+
+/* Inputs: pills, 44px high, `border-strong` border; read-only fields on the sunken surface. */
+.flitagent-wrap input[type=text],
+.flitagent-wrap input[type=url],
+.flitagent-wrap input[type=email],
+.flitagent-wrap input[type=search] {
+	min-height: 44px;
+	padding: 0 var(--flit-space-5);
+	border: var(--flit-border-width-hairline) solid var(--flit-color-border-strong);
+	border-radius: var(--flit-radius-full);
+	background-color: var(--flit-color-surface);
+	box-shadow: none;
+	color: var(--flit-color-fg);
+	font-family: var(--flit-font-sans);
+	font-size: var(--flit-font-size-base);
+	line-height: var(--flit-line-height-base);
+}
+
+.flitagent-wrap input[type=text]:hover:not(:disabled),
+.flitagent-wrap input[type=url]:hover:not(:disabled),
+.flitagent-wrap input[type=email]:hover:not(:disabled),
+.flitagent-wrap input[type=search]:hover:not(:disabled) {
+	border-color: var(--flit-color-fg-muted);
+}
+
+.flitagent-wrap input[type=text]:focus,
+.flitagent-wrap input[type=url]:focus,
+.flitagent-wrap input[type=email]:focus,
+.flitagent-wrap input[type=search]:focus {
+	border-color: var(--flit-color-border-strong);
+	box-shadow: none;
+}
+
+.flitagent-wrap input[type=text]:disabled,
+.flitagent-wrap input[type=url]:disabled,
+.flitagent-wrap input[type=email]:disabled,
+.flitagent-wrap input[type=search]:disabled {
+	opacity: 0.6;
+}
+
+.flitagent-wrap input[readonly] {
+	background-color: var(--flit-color-surface-sunken);
+}
+
+.flitagent-wrap input.code {
+	font-family: var(--flit-font-mono);
+	font-size: var(--flit-font-size-sm);
+}
+
+/*
+ * Checkboxes: core's control, with Flit borders and a teal tick instead of the admin colour scheme's. Never squeezed
+ * by a flex label beside long text: below 783px core makes them 25px (e2e 2026-10-30 follow-up).
+ */
+.flitagent-wrap input[type=checkbox] {
+	flex: none;
+	border-color: var(--flit-color-border-strong);
+	box-shadow: none;
+}
+
+.flitagent-wrap input[type=checkbox]:focus {
+	border-color: var(--flit-color-border-strong);
+	box-shadow: none;
+}
+
+.flitagent-wrap input[type=checkbox]:checked {
+	border-color: var(--flit-color-accent);
+	background: var(--flit-color-accent);
+}
+
+.flitagent-wrap input[type=checkbox]:checked::before {
+	content: "";
+	display: block;
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	background: var(--flit-color-accent-fg);
+	mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 6 9 17l-5-5'/></svg>") center/80% no-repeat;
+}
+
+.flitagent-wrap label {
+	color: var(--flit-color-fg);
+}
+
+/* ==========================================================================
+ * Screens
+ *
+ * Layout of single screens, inside .flitagent-wrap only.
+ * ========================================================================== */
+
+/* Action rows: at least 8px apart (A7), the primary first. A link beside a button sits on its centre line. */
+.flitagent-wrap .flitagent-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--flit-space-3);
+	margin: var(--flit-space-6) 0;
+}
+
+/* The Connect screen's Disconnect form sits in the action row. */
+.flitagent-wrap .flitagent-inline-form {
+	margin: 0;
+}
+
+/* The Set up dialogs: a value to copy in a code box with its Copy button, label above. */
+.flitagent-wrap .flitagent-field label {
+	display: block;
+	margin: 0 0 var(--flit-space-1);
+	font-size: var(--flit-font-size-sm);
+	font-weight: var(--flit-font-weight-medium);
+	line-height: 1.55;
+}
+
+.flitagent-wrap .flitagent-copy-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--flit-space-2);
+}
+
+.flitagent-wrap .flitagent-copy-row input {
+	flex: 1 1 280px;
+	width: auto;
+	min-width: 0;
+	max-width: 100%;
+	min-height: 0;
+	padding: var(--flit-space-2) var(--flit-space-3);
+	border-color: var(--flit-color-border);
+	border-radius: var(--flit-radius-md);
+	background-color: var(--flit-color-surface-sunken);
+	color: var(--flit-color-fg);
+	font-family: var(--flit-font-mono);
+	font-size: 12.5px;
+	line-height: 1.55;
+}
+
+.flitagent-wrap .flitagent-copy-row .button {
+	min-height: 36px;
+	padding: 0 14px;
+	font-size: var(--flit-font-size-sm);
+}
+
+.flitagent-wrap .flitagent-links {
+	color: var(--flit-color-fg-muted);
+}
+
+/*
+ * Setup guide.
+ * The check step's links while the checks run: a spinner before the text.
+ */
+.flitagent-wrap a[data-flitagent-run].is-running {
+	pointer-events: none;
+	opacity: 0.8;
+}
+
+.flitagent-wrap a[data-flitagent-run].is-running::before {
+	content: "";
+	display: inline-block;
+	width: 0.9em;
+	height: 0.9em;
+	margin-right: 0.5em;
+	vertical-align: -0.1em;
+	border: 2px solid currentcolor;
+	border-right-color: transparent;
+	border-radius: 50%;
+	animation: flitagent-spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.flitagent-wrap a[data-flitagent-run].is-running::before {
+		animation: none;
+	}
+}
+
+/* The check step while the checks run: an endless bar under the message. */
+.flitagent-wrap .flitagent-checking-text {
+	margin: 0 0 var(--flit-space-3);
+	font-weight: var(--flit-font-weight-medium);
+}
+
+.flitagent-wrap .flitagent-progress {
+	position: relative;
+	height: 6px;
+	overflow: hidden;
+	border-radius: 3px;
+	background: var(--flit-color-surface-sunken);
+}
+
+.flitagent-wrap .flitagent-progress span {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 40%;
+	border-radius: 3px;
+	background: var(--flit-color-accent);
+	animation: flitagent-progress 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.flitagent-wrap .flitagent-progress span {
+		left: 0;
+		width: 100%;
+		animation: none;
+		opacity: 0.6;
+	}
+}
+
+/*
+ * An AI tool's steps in its Set up dialog (#188): its parts 14px apart like the dialog's, the steps 8px apart, a
+ * step's fields 10px apart. The notes under a command and the guide link are small and muted.
+ */
+.flitagent-wrap .flitagent-app-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.flitagent-wrap .flitagent-app-panel p {
+	margin: 0;
+}
+
+.flitagent-wrap .flitagent-app-panel ol {
+	display: flex;
+	flex-direction: column;
+	gap: var(--flit-space-2);
+	margin: 0;
+	padding-left: 22px;
+}
+
+.flitagent-wrap .flitagent-app-panel li {
+	margin: 0;
+}
+
+.flitagent-wrap .flitagent-app-panel li > a {
+	font-weight: var(--flit-font-weight-semibold);
+}
+
+.flitagent-wrap .flitagent-app-panel .flitagent-fields {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.flitagent-wrap .flitagent-app-panel .description,
+.flitagent-wrap .flitagent-app-panel .flitagent-guide-link {
+	color: var(--flit-color-fg-muted);
+	font-size: var(--flit-font-size-sm);
+	line-height: 1.55;
+}
+
+.flitagent-wrap .flitagent-app-panel .description code {
+	padding: 0;
+	border-radius: 0;
+	background: none;
+	color: inherit;
+	font-family: var(--flit-font-mono);
+	font-size: 12.5px;
+}
+
+.flitagent-wrap .flitagent-external-icon {
+	margin-left: 2px;
+	vertical-align: -1px;
+}
+
+/*
+ * The setup guide's Connect step (#209): the Connect screen's two cards as boxes inside the step card (the action
+ * row under a rule is the frame's, under Setup guide). Connect to flitagent.com is the board's 40px pill.
+ */
+.flitagent-wrap .flitagent-connect-box {
+	margin: 14px 0;
+	padding: var(--flit-space-5) var(--flit-space-6);
+	border: var(--flit-border-width-hairline) solid var(--flit-color-border);
+	border-radius: var(--flit-radius-md);
+}
+
+.flitagent-wrap .flitagent-connect-box h3 {
+	margin: 0 0 14px;
+	letter-spacing: -0.01em;
+}
+
+/* The row's second line on the step card's 1.55 line, as on the board. */
+.flitagent-wrap .flitagent-connect-box .flitagent-tool-sub {
+	line-height: inherit;
+}
+
+.flitagent-wrap .flitagent-connect-box p {
+	margin: 14px 0;
+}
+
+.flitagent-wrap .flitagent-connect-box > :last-child,
+.flitagent-wrap .flitagent-connect-box form > p:nth-last-child(2) {
+	margin-bottom: 0;
+}
+
+.flitagent-wrap .flitagent-connect-box > form .button {
+	min-height: 40px;
+	padding: 0 22px;
+}
+
+@media screen and (max-width: 600px) {
+	.flitagent-wrap .flitagent-connect-box {
+		padding: var(--flit-space-4);
+	}
+}
+
+/*
+ * The Set up dialogs sit in the step card, whose children have no margins: a modal one keeps the auto margins that
+ * centre it.
+ */
+.flitagent-wrap .flitagent-onboarding-card > .flitagent-dialog:modal {
+	margin: auto;
+}
+
+/*
+ * Chips on the Connect screen's cards and in setup step 3: a 13px glyph, 2px 9px, on the body's 1.55 line (here, not
+ * under Connect screen, which shares no class with Settings).
+ */
+.flitagent-wrap .flitagent-connectivity .flitagent-chip,
+.flitagent-wrap .flitagent-tools-card .flitagent-chip,
+.flitagent-wrap .flitagent-connect-box .flitagent-chip {
+	padding: 2px 9px;
+	line-height: 1.55;
+}
+
+.flitagent-wrap .flitagent-connectivity .flitagent-chip-icon,
+.flitagent-wrap .flitagent-tools-card .flitagent-chip-icon,
+.flitagent-wrap .flitagent-connect-box .flitagent-chip-icon {
+	width: 13px;
+	height: 13px;
+}
+
+/* The glyph in the role's icon colour where the board draws one (Connected). */
+.flitagent-wrap .flitagent-connectivity .flitagent-chip--success .flitagent-chip-icon,
+.flitagent-wrap .flitagent-tools-card .flitagent-chip--success .flitagent-chip-icon,
+.flitagent-wrap .flitagent-connect-box .flitagent-chip--success .flitagent-chip-icon {
+	color: var(--flit-color-success-icon);
+}
+
+.flitagent-wrap .flitagent-connectivity .flitagent-tool-chip,
+.flitagent-wrap .flitagent-tools-card .flitagent-tool-chip,
+.flitagent-wrap .flitagent-connect-box .flitagent-tool-chip {
+	line-height: 1.55;
+}
+
+/* The Connect step's progress (#209): labels above circles on a thick rounded track, filled up to the current step. */
+.flitagent-wrap .flitagent-steps-wrap {
+	padding: 6px 0 22px;
+	border-bottom: var(--flit-border-width-hairline) solid var(--flit-color-border);
+}
+
+.flitagent-wrap .flitagent-steps {
+	position: relative;
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	width: 520px;
+	max-width: 100%;
+	margin: 0 auto;
+	padding: 0;
+	list-style: none;
+	/* The track, then its fill: under the circles' centres. */
+}
+
+.flitagent-wrap .flitagent-steps::before,
+.flitagent-wrap .flitagent-steps::after {
+	content: "";
+	position: absolute;
+	bottom: 12px;
+	left: 0;
+	height: 6px;
+	border-radius: 3px;
+	background: var(--flit-color-border);
+}
+
+.flitagent-wrap .flitagent-steps::before {
+	right: 0;
+}
+
+.flitagent-wrap .flitagent-steps::after {
+	width: 25%;
+	background: var(--flit-color-accent);
+}
+
+.flitagent-wrap .flitagent-steps.flitagent-steps--tools::after {
+	width: 75%;
+}
+
+.flitagent-wrap .flitagent-steps.flitagent-steps--done::after {
+	width: 100%;
+}
+
+.flitagent-wrap .flitagent-steps-item {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--flit-space-3);
+	min-width: 0;
+	margin: 0;
+}
+
+.flitagent-wrap .flitagent-steps-label {
+	color: var(--flit-color-accent);
+	font-size: var(--flit-font-size-xs);
+	font-weight: var(--flit-font-weight-semibold);
+	line-height: 16px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+.flitagent-wrap .is-upcoming .flitagent-steps-label {
+	color: var(--flit-color-fg-subtle);
+}
+
+.flitagent-wrap .flitagent-steps-dot {
+	position: relative;
+	z-index: 1;
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	border-radius: var(--flit-radius-full);
+	background: var(--flit-color-border);
+}
+
+.flitagent-wrap .flitagent-steps-dot svg {
+	stroke-width: 3;
+}
+
+/* Forced colours drop the fills: outline every circle and keep the check. */
+@media (forced-colors: active) {
+	.flitagent-wrap .flitagent-steps-dot {
+		border: 3px solid CanvasText;
+	}
+}
+
+.flitagent-wrap .is-done .flitagent-steps-dot {
+	background: var(--flit-color-accent);
+	color: var(--flit-color-neutral-0);
+}
+
+.flitagent-wrap .is-current .flitagent-steps-dot {
+	border: 3px solid var(--flit-color-accent);
+	background: var(--flit-color-surface);
+}
+
+@media screen and (max-width: 600px) {
+	.flitagent-wrap .flitagent-steps-label {
+		white-space: normal;
+		text-align: center;
+	}
+}
+
+@keyframes flitagent-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@keyframes flitagent-progress {
+	from {
+		left: -40%;
+	}
+	to {
+		left: 100%;
+	}
+}
+
+/* ==========================================================================
+ * Settings
+ *
+ * Settings (#187), following the dashboard design: the settings card and the Connection card with its checks.
+ * Inside .flitagent-wrap only; colours come from the tokens.
+ * ========================================================================== */
+
+.flitagent-wrap .flitagent-card .flitagent-actions {
+	margin: var(--flit-space-4) 0 0;
+}
+
+/* Settings and Connection: one card each, 820px at most. */
+.flitagent-wrap .flitagent-card--form {
+	max-width: 820px;
+}
+
+.flitagent-wrap .flitagent-setting {
+	display: grid;
+	grid-template-columns: 160px minmax(0, 1fr);
+	gap: 0 var(--flit-space-6);
+	padding: var(--flit-space-4) 0;
+	border-bottom: var(--flit-border-width-hairline) solid var(--flit-color-border);
+}
+
+.flitagent-wrap .flitagent-setting:first-of-type {
+	padding-top: 0;
+}
+
+.flitagent-wrap .flitagent-setting:last-of-type {
+	border-bottom: 0;
+}
+
+@media screen and (max-width: 600px) {
+	.flitagent-wrap .flitagent-setting {
+		grid-template-columns: 1fr;
+		gap: var(--flit-space-2);
+	}
+}
+
+.flitagent-wrap .flitagent-setting-label {
+	margin: 0;
+	font-weight: var(--flit-font-weight-semibold);
+}
+
+.flitagent-wrap .flitagent-setting-label label {
+	font-weight: var(--flit-font-weight-semibold);
+}
+
+.flitagent-wrap .flitagent-setting-body {
+	display: flex;
+	flex-direction: column;
+	gap: var(--flit-space-2);
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.flitagent-wrap .flitagent-setting-body .description {
+	margin: 0;
+	color: var(--flit-color-fg-muted);
+	font-size: var(--flit-font-size-sm);
+}
+
+.flitagent-wrap .flitagent-check-label {
+	display: flex;
+	align-items: center;
+	gap: var(--flit-space-2);
+	min-height: 28px;
+	margin: 0;
+}
+
+.flitagent-wrap .flitagent-setting-save {
+	margin: var(--flit-space-3) 0 0;
+}
+
+/* Test connection: one line per check, the chip and the fix beside the name. */
+.flitagent-wrap .flitagent-checks {
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: var(--flit-border-width-hairline) solid var(--flit-color-border);
+	border-radius: var(--flit-radius-md);
+	list-style: none;
+}
+
+.flitagent-wrap .flitagent-check {
+	display: grid;
+	grid-template-columns: 140px 112px minmax(0, 1fr);
+	gap: var(--flit-space-3);
+	align-items: start;
+	margin: 0;
+	padding: var(--flit-space-3) var(--flit-space-4);
+	border-bottom: var(--flit-border-width-hairline) solid var(--flit-color-border);
+}
+
+.flitagent-wrap .flitagent-check:last-child {
+	border-bottom: 0;
+}
+
+.flitagent-wrap .flitagent-check .flitagent-chip {
+	justify-self: start;
+}
+
+@media screen and (max-width: 600px) {
+	.flitagent-wrap .flitagent-check {
+		grid-template-columns: 1fr;
+		gap: var(--flit-space-2);
+	}
+}
+
+/* ==========================================================================
+ * Connect screen
+ *
+ * The Connect screen (#188): Site connectivity, Connected AI tools and the dialogs, inside .flitagent-wrap only. The
+ * third-party brand tokens colour only that app's own tile.
+ * ========================================================================== */
+
+.flitagent-wrap {
+	/*
+	 * The apps' own brand colours for their marks on the "is connected" dialog: the one exception to token-only colours,
+	 * declared here only. ChatGPT is its black and white and Claude its clay, @flit/design's brand tokens; Claude's ivory
+	 * tile and its light border (Anthropic's #faf9f5 and #e8e6dc) have no token, so they are written out here.
+	 */
+	--flitagent-brand-chatgpt-tile: var(--flit-color-brand-chatgpt);
+	--flitagent-brand-chatgpt-mark: var(--flit-color-brand-chatgpt-fg);
+	--flitagent-brand-claude-tile: rgb(250 249 245);
+	--flitagent-brand-claude-tile-border: rgb(232 230 220);
+	--flitagent-brand-claude-mark: var(--flit-color-brand-claude);
+}
+
+.flitagent-wrap .flitagent-connectivity,
+.flitagent-wrap .flitagent-tools-card {
+	max-width: 820px;
+}
+
+.flitagent-wrap .flitagent-connectivity h2,
+.flitagent-wrap .flitagent-tools-card h2 {
+	margin: 0 0 var(--flit-space-4);
+}
+
+/* The connection's facts (also the setup guide's Connect step): label column, then the value, rows 10px apart. */
+.flitagent-wrap .flitagent-connection-facts {
+	display: grid;
+	grid-template-columns: 240px minmax(0, 1fr);
+	gap: 10px var(--flit-space-6);
+	margin: 0;
+}
+
+.flitagent-wrap .flitagent-connection-facts dt {
+	color: var(--flit-color-fg);
+	font-weight: var(--flit-font-weight-semibold);
+}
+
+.flitagent-wrap .flitagent-connection-facts dd {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--flit-space-2);
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+@media screen and (max-width: 600px) {
+	.flitagent-wrap .flitagent-connection-facts {
+		grid-template-columns: 1fr;
+		gap: 0;
+	}
+	.flitagent-wrap .flitagent-connection-facts dd {
+		margin-bottom: var(--flit-space-3);
+	}
+}
+
+/* Connected "with" its tools: the word muted and smaller, the chips keep their own colour and size. */
+.flitagent-wrap .flitagent-status-with {
+	color: var(--flit-color-fg-muted);
+	font-size: var(--flit-font-size-sm);
+}
+
+.flitagent-wrap .flitagent-tool-chips {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: var(--flit-space-2);
+}
+
+/* A connected tool in the Status row: its round tile and its name on paper. */
+.flitagent-wrap .flitagent-tool-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 10px 2px 3px;
+	border: var(--flit-border-width-hairline) solid var(--flit-color-border);
+	border-radius: var(--flit-radius-full);
+	background: var(--flit-color-surface);
+	color: var(--flit-color-fg);
+	font-size: var(--flit-font-size-xs);
+	font-weight: var(--flit-font-weight-medium);
+	line-height: var(--flit-line-height-xs);
+	white-space: nowrap;
+}
+
+.flitagent-wrap .flitagent-tool-chip .flitagent-tool-tile {
+	width: 18px;
+	height: 18px;
+	border-radius: var(--flit-radius-full);
+}
+
+.flitagent-wrap .flitagent-tool-chip .flitagent-tool-tile .flitagent-app-icon {
+	width: 11px;
+	height: 11px;
+}
+
+/* A tool's tile: its mark on its brand colour; a terminal prompt on the sunken surface for Manual configuration. */
+.flitagent-wrap .flitagent-tool-tile {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border-radius: var(--flit-radius-md);
+	background: var(--flit-color-surface-sunken);
+	color: var(--flit-color-fg);
+}
+
+.flitagent-wrap .flitagent-tool-tile .flitagent-app-icon {
+	width: 18px;
+	height: 18px;
+}
+
+.flitagent-wrap .flitagent-tool-tile--chatgpt {
+	background: var(--flit-color-brand-chatgpt);
+	color: var(--flit-color-brand-chatgpt-fg);
+}
+
+.flitagent-wrap .flitagent-tool-tile--claude {
+	background: var(--flit-color-brand-claude);
+	color: var(--flit-color-brand-claude-fg);
+}
+
+/* Connected AI tools: one row per tool, hairlines between. */
+.flitagent-wrap .flitagent-ai-tools {
+	margin: 0;
+	padding: 0;
+	border-bottom: var(--flit-border-width-hairline) solid var(--flit-color-border);
+	list-style: none;
+}
+
+.flitagent-wrap .flitagent-ai-tools .button {
+	min-height: 36px;
+	padding: 0 var(--flit-space-4);
+	font-size: var(--flit-font-size-sm);
+}
+
+.flitagent-wrap .flitagent-tool {
+	display: grid;
+	grid-template-columns: 32px minmax(0, 1fr) auto auto;
+	align-items: center;
+	gap: var(--flit-space-3) 14px;
+	margin: 0;
+	padding: 14px 0;
+	border-top: var(--flit-border-width-hairline) solid var(--flit-color-border);
+}
+
+@media screen and (max-width: 600px) {
+	.flitagent-wrap .flitagent-tool {
+		grid-template-columns: 32px minmax(0, 1fr) auto;
+	}
+	.flitagent-wrap .flitagent-tool > :last-child {
+		grid-column: 2/-1;
+		justify-self: start;
+	}
+}
+
+.flitagent-wrap .flitagent-tool-text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.flitagent-wrap .flitagent-tool-name {
+	font-weight: var(--flit-font-weight-semibold);
+}
+
+.flitagent-wrap .flitagent-tool-sub {
+	color: var(--flit-color-fg-muted);
+	font-size: var(--flit-font-size-sm);
+	line-height: var(--flit-line-height-sm);
+	overflow-wrap: anywhere;
+}
+
+/*
+ * Set up before the site is connected: the primary pill dimmed, not a link or a button. Not a .button: core forces
+ * grey text on `.button[aria-disabled="true"]` with !important, and the board keeps the paper text.
+ */
+.flitagent-wrap .flitagent-button-inert {
+	display: inline-flex;
+	box-sizing: border-box;
+	align-items: center;
+	justify-content: center;
+	min-height: 36px;
+	padding: 0 var(--flit-space-4);
+	border: var(--flit-border-width-hairline) solid var(--flit-color-accent);
+	border-radius: var(--flit-radius-full);
+	background: var(--flit-color-accent);
+	color: var(--flit-color-accent-fg);
+	font-family: var(--flit-font-sans);
+	font-size: var(--flit-font-size-sm);
+	font-weight: var(--flit-font-weight-medium);
+	white-space: nowrap;
+	cursor: not-allowed;
+	opacity: 0.45;
+}
+
+/* The confirm button of a Disconnect dialog: solid danger. */
+.flitagent-wrap .button.flitagent-button-danger,
+.flitagent-wrap .button.flitagent-button-danger:hover,
+.flitagent-wrap .button.flitagent-button-danger:active,
+.flitagent-wrap .button.flitagent-button-danger:focus {
+	border-color: var(--flit-color-danger-fg);
+	background: var(--flit-color-danger-fg);
+	color: var(--flit-color-neutral-0);
+}
+
+/* Dialogs: paper on the overlay backdrop, centred on the main content (beside the admin menu, see below). */
+.flitagent-wrap .flitagent-dialog {
+	box-sizing: border-box;
+	width: min(480px, 100vw - 2 * var(--flit-space-4));
+	padding: var(--flit-space-6) var(--flit-space-8);
+	border: 0;
+	border-radius: var(--flit-radius-lg);
+	background: var(--flit-color-surface);
+	box-shadow: var(--flit-shadow-overlay);
+	color: var(--flit-color-fg);
+}
+
+.flitagent-wrap .flitagent-dialog > * {
+	margin: 0;
+}
+
+.flitagent-wrap .flitagent-dialog > * + * {
+	margin-top: var(--flit-space-3);
+}
+
+.flitagent-wrap .flitagent-dialog h2 {
+	margin: 0;
+	font-size: var(--flit-font-size-xl);
+	line-height: var(--flit-line-height-xl);
+}
+
+.flitagent-wrap .flitagent-dialog::backdrop {
+	background: var(--flit-overlay-backdrop);
+}
+
+/* A Set up dialog: 640px, 24px 28px, its parts 14px apart, a 22px heading, 40px buttons over a rule. */
+.flitagent-wrap .flitagent-dialog--wide {
+	width: min(640px, 100vw - 2 * var(--flit-space-4));
+	padding: var(--flit-space-6) 28px;
+}
+
+.flitagent-wrap .flitagent-dialog--wide > * + * {
+	margin-top: 14px;
+}
+
+.flitagent-wrap .flitagent-dialog--wide h2 {
+	font-size: 22px;
+	letter-spacing: -0.01em;
+}
+
+.flitagent-wrap .flitagent-dialog--wide .flitagent-dialog-actions {
+	gap: var(--flit-space-2);
+	margin-top: 14px;
+	padding-top: 6px;
+	border-top: var(--flit-border-width-hairline) solid var(--flit-color-border);
+}
+
+.flitagent-wrap .flitagent-dialog--wide .flitagent-dialog-actions .button {
+	min-height: 40px;
+	padding: 0 22px;
+}
+
+/*
+ * A Set up dialog's waiting line: shown only while tool-status.js is checking (it marks the tool list live), so not
+ * without the script or once it stopped after ten minutes.
+ */
+.flitagent-wrap .flitagent-setup-waiting {
+	display: none;
+	align-items: center;
+	gap: var(--flit-space-3);
+	padding: var(--flit-space-3) var(--flit-space-4);
+	border-radius: var(--flit-radius-md);
+	background: var(--flit-color-surface-sunken);
+	color: var(--flit-color-fg-muted);
+	font-size: var(--flit-font-size-sm);
+	line-height: var(--flit-line-height-sm);
+}
+
+.flitagent-wrap .flitagent-setup-waiting svg {
+	flex: none;
+	color: var(--flit-color-fg-subtle);
+	stroke-width: 2;
+}
+
+.flitagent-wrap .flitagent-setup-waiting strong {
+	color: var(--flit-color-fg);
+	font-weight: var(--flit-font-weight-semibold);
+}
+
+.flitagent-wrap:has(.flitagent-ai-tools[data-flitagent-live]) .flitagent-setup-waiting {
+	display: flex;
+}
+
+/*
+ * "ChatGPT is connected": 520px with 16px corners, a close button in the corner, the app's mark on a 56px tile with a
+ * check, a 24px heading, the first question in a sunken card, then Try now in a footer on the page background.
+ * Manual configuration has no Try now, so its card ends the dialog. Without the script it is a card in the page,
+ * so the close button is placed against the dialog itself.
+ */
+.flitagent-wrap .flitagent-dialog--done {
+	width: min(520px, 100vw - 2 * var(--flit-space-4));
+	padding: 0;
+	overflow: auto;
+	border-radius: 16px;
+}
+
+.flitagent-wrap .flitagent-dialog--done h2 {
+	margin: 14px 0 0;
+	font-size: var(--flit-font-size-2xl);
+	font-weight: var(--flit-font-weight-medium);
+	line-height: 1.25;
+	letter-spacing: -0.01em;
+}
+
+.flitagent-wrap .flitagent-done-close {
+	position: absolute;
+	top: var(--flit-space-3);
+	right: var(--flit-space-3);
+}
+
+.flitagent-wrap .flitagent-dialog--done .flitagent-done-head {
+	margin: 0;
+	padding: 28px 32px 0;
+}
+
+.flitagent-wrap .flitagent-dialog--done .flitagent-done-head p {
+	margin: 6px 0 0;
+	color: var(--flit-color-fg-muted);
+}
+
+/*
+ * The app's mark on its brand colours (see the top of this section); a terminal prompt on the sunken surface for Manual
+ * configuration. The check sits on the corner, ringed in the dialog's surface.
+ */
+.flitagent-wrap .flitagent-done-tile {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 56px;
+	height: 56px;
+	border: var(--flit-border-width-hairline) solid var(--flit-color-border);
+	border-radius: 16px;
+	background: var(--flit-color-surface-sunken);
+	color: var(--flit-color-fg);
+}
+
+.flitagent-wrap .flitagent-done-tile .flitagent-app-icon {
+	width: 28px;
+	height: 28px;
+}
+
+.flitagent-wrap .flitagent-done-tile--chatgpt {
+	border-color: var(--flitagent-brand-chatgpt-tile);
+	background: var(--flitagent-brand-chatgpt-tile);
+	color: var(--flitagent-brand-chatgpt-mark);
+}
+
+.flitagent-wrap .flitagent-done-tile--claude {
+	border-color: var(--flitagent-brand-claude-tile-border);
+	background: var(--flitagent-brand-claude-tile);
+	color: var(--flitagent-brand-claude-mark);
+}
+
+.flitagent-wrap .flitagent-done-badge {
+	position: absolute;
+	right: -6px;
+	bottom: -6px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	border: 3px solid var(--flit-color-surface);
+	border-radius: var(--flit-radius-full);
+	background: var(--flit-color-success-icon);
+	color: var(--flit-color-neutral-0);
+}
+
+.flitagent-wrap .flitagent-done-badge svg {
+	stroke-width: 3.2;
+}
+
+/* The first question: "Let’s check" and Copy over the question, on the sunken surface. */
+.flitagent-wrap .flitagent-dialog--done .flitagent-done-question {
+	display: flex;
+	flex-direction: column;
+	gap: var(--flit-space-2);
+	margin: 18px 32px 0;
+	padding: 14px var(--flit-space-4);
+	border: var(--flit-border-width-hairline) solid var(--flit-color-border);
+	border-radius: var(--flit-radius-lg);
+	background: var(--flit-color-surface-sunken);
+}
+
+.flitagent-wrap .flitagent-dialog--done .flitagent-done-question:last-child {
+	margin-bottom: 28px;
+}
+
+.flitagent-wrap .flitagent-dialog--done .flitagent-done-question p {
+	margin: 0;
+	font-size: 15px;
+	line-height: 1.5;
+}
+
+.flitagent-wrap .flitagent-done-question-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--flit-space-3);
+	color: var(--flit-color-fg-muted);
+	font-size: var(--flit-font-size-xs);
+	font-weight: var(--flit-font-weight-semibold);
+	line-height: var(--flit-line-height-xs);
+}
+
+/* Copy as a teal text button: 40px tall to touch, its negative margins keep the card's row as the board draws it. */
+.flitagent-wrap .flitagent-copy-text {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 40px;
+	margin: -12px -6px;
+	padding: 0 6px;
+	border: 0;
+	border-radius: var(--flit-radius-md);
+	background: transparent;
+	color: var(--flit-color-link);
+	font-family: var(--flit-font-sans);
+	font-size: var(--flit-font-size-sm);
+	font-weight: var(--flit-font-weight-medium);
+	cursor: pointer;
+}
+
+.flitagent-wrap .flitagent-copy-text:hover {
+	color: var(--flit-color-accent-hover);
+}
+
+.flitagent-wrap .flitagent-copy-text svg {
+	stroke-width: 2;
+}
+
+.flitagent-wrap .flitagent-dialog--done .flitagent-done-footer {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 10px;
+	margin: 22px 0 0;
+	padding: var(--flit-space-4) 32px;
+	border-top: var(--flit-border-width-hairline) solid var(--flit-color-border);
+	background: var(--flit-color-bg);
+}
+
+.flitagent-wrap .flitagent-dialog--done .flitagent-done-footer .button {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--flit-space-2);
+	min-height: 40px;
+	padding: 0 22px;
+}
+
+.flitagent-wrap .flitagent-dialog--done .flitagent-done-footer .flitagent-external-icon {
+	width: 14px;
+	height: 14px;
+	margin: 0;
+}
+
+.flitagent-wrap .flitagent-dialog-head {
+	display: flex;
+	align-items: center;
+	gap: var(--flit-space-3);
+}
+
+.flitagent-wrap .flitagent-dialog-head h2 {
+	flex: 1;
+}
+
+.flitagent-wrap .flitagent-dialog-close {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	padding: 0;
+	border: 0;
+	border-radius: var(--flit-radius-full);
+	background: transparent;
+	color: var(--flit-color-fg-muted);
+	cursor: pointer;
+}
+
+.flitagent-wrap .flitagent-dialog-close:hover {
+	background: var(--flit-color-surface-hover);
+	color: var(--flit-color-fg);
+}
+
+.flitagent-wrap .flitagent-dialog-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: var(--flit-space-2);
+	margin-top: var(--flit-space-5);
+}
+
+/* Without the script, a Set up dialog the address asks for is open in the page, as a card under the tools. */
+.flitagent-wrap .flitagent-dialog[open]:not(:modal) {
+	position: static;
+	width: auto;
+	max-width: 820px;
+	margin: 0 0 var(--flit-space-6);
+	border: var(--flit-border-width-hairline) solid var(--flit-color-border);
+	box-shadow: var(--flit-shadow-card);
+}
+
+.flitagent-wrap .flitagent-dialog--done[open]:not(:modal) {
+	position: relative;
+}
+
+/*
+ * A modal dialog is centred on the main content, not counting the admin menu: 160px, folded 36px (also when it
+ * folds itself below 960px), none below 782px. Only the dialog is placed; the menu keeps core's look.
+ */
+.flitagent-wrap .flitagent-dialog:modal {
+	inset-inline-start: 160px;
+}
+
+.folded .flitagent-wrap .flitagent-dialog:modal {
+	inset-inline-start: 36px;
+}
+
+@media screen and (max-width: 960px) {
+	.auto-fold .flitagent-wrap .flitagent-dialog:modal {
+		inset-inline-start: 36px;
+	}
+}
+
+@media screen and (max-width: 782px) {
+	.flitagent-wrap .flitagent-dialog:modal,
+	.folded .flitagent-wrap .flitagent-dialog:modal,
+	.auto-fold .flitagent-wrap .flitagent-dialog:modal {
+		inset-inline-start: 0;
+	}
+}
+
+/*
+ * #198: the status line of a connect form; the script fills it when flitagent.com opens in a new tab. Empty, it
+ * takes no room but stays in the accessibility tree, so the live region is there before the text arrives.
+ */
+.flitagent-wrap .flitagent-connect-status {
+	margin: var(--flit-space-2) 0 0;
+	color: var(--flit-color-fg-muted);
+}
+
+.flitagent-wrap .flitagent-connect-status:empty {
+	margin: 0;
+}
+
+.flitagent-wrap .flitagent-connect-again {
+	margin-inline-start: var(--flit-space-2);
+}
+
+/* ==========================================================================
+ * Setup guide
+ *
+ * The setup guide's frame (#213), shared by every step and following the design's Setup boards: the step card, "Step N
+ * of 4", the step heading, body text and the action row (the page frame and header are every screen's: Components,
+ * Wrapper). A step's own content keeps its rules under Screens. Raw px values are the boards' where no token has them.
+ * ========================================================================== */
+
+/*
+ * A notice (the outcome of connecting, a Disconnect or a Set up) sits above the step card, as on every other
+ * screen, never inside it (e2e 2026-10-30, M11), and no wider than the card.
+ */
+.flitagent-wrap.flitagent-onboarding > .flitagent-notice {
+	max-width: calc(820px + 64px + 2 * var(--flit-border-width-hairline));
+}
+
+/*
+ * The step card: paper, hairline, 12px radius, the card shadow; its children 14px apart, with no margins of their
+ * own. A step's form only groups fields, so its parts sit in the same column.
+ */
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-card {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	box-sizing: content-box;
+	margin: 0;
+	padding: 28px 32px;
+	border-radius: var(--flit-radius-lg);
+	line-height: 1.55;
+}
+
+/*
+ * The step card's content width on each step's board (the card adds its padding and border). The card carries
+ * .flitagent-onboarding-card--<step>.
+ */
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-card.flitagent-onboarding-card--welcome {
+	max-width: 720px;
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-card.flitagent-onboarding-card--check {
+	max-width: 820px;
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-card.flitagent-onboarding-card--connect {
+	max-width: 820px;
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-card.flitagent-onboarding-card--done {
+	max-width: 720px;
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-card > form {
+	display: contents;
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-card > *,
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-card > form > * {
+	margin: 0;
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-card p,
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-card li {
+	line-height: inherit;
+}
+
+@media screen and (max-width: 600px) {
+	.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-card {
+		padding: var(--flit-space-4);
+	}
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-step {
+	color: var(--flit-color-fg-subtle);
+	font-size: var(--flit-font-size-xs);
+	font-weight: var(--flit-font-weight-medium);
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-card > h2 {
+	font-size: 22px;
+	line-height: inherit;
+	letter-spacing: -0.01em;
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-card > ul {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding-left: var(--flit-space-5);
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-card > ul li {
+	margin: 0;
+}
+
+/* The action row: Back, then the step's buttons, all at the right end; 40px pills, 8px apart. */
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-actions {
+	justify-content: flex-end;
+	gap: var(--flit-space-2);
+	padding-top: var(--flit-space-2);
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-actions .button {
+	min-height: 40px;
+	padding: 0 22px;
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-card--check .flitagent-onboarding-actions {
+	padding-top: var(--flit-space-1);
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-actions--rule {
+	border-top: var(--flit-border-width-hairline) solid var(--flit-color-border);
+}
+
+/* The check step's verdict: a 4px bar in the role's text colour, no glyph. */
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-verdict {
+	padding: var(--flit-space-3) 14px;
+	border-left-color: var(--flit-color-info-fg);
+	border-radius: var(--flit-radius-sm);
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-verdict::before {
+	display: none;
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-verdict.notice-success {
+	border-left-color: var(--flit-color-success-fg);
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-verdict.notice-warning {
+	border-left-color: var(--flit-color-warning-fg);
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-verdict.notice-error {
+	border-left-color: var(--flit-color-danger-fg);
+}
+
+/* The check step's results: hairline rows, no frame, the header in muted text. */
+.flitagent-wrap.flitagent-onboarding .flitagent-check-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--flit-font-size-sm);
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-check-table th,
+.flitagent-wrap.flitagent-onboarding .flitagent-check-table td {
+	padding: 10px;
+	border-bottom: var(--flit-border-width-hairline) solid var(--flit-color-border);
+	text-align: left;
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-check-table th {
+	padding: var(--flit-space-2) 10px;
+	color: var(--flit-color-fg-muted);
+	font-weight: var(--flit-font-weight-medium);
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-check-table td:last-child {
+	color: var(--flit-color-fg-muted);
+}
+
+/* The board's 150px and 100px columns, plus their padding. */
+.flitagent-wrap.flitagent-onboarding .flitagent-check-table .column-check {
+	width: 170px;
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-check-table .column-result {
+	width: 120px;
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-check-table .flitagent-chip {
+	padding: 2px 10px;
+	font-size: inherit;
+	line-height: inherit;
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-check-table .flitagent-chip-icon {
+	stroke-width: 2.4;
+}
+
+.flitagent-wrap.flitagent-onboarding .flitagent-onboarding-note {
+	color: var(--flit-color-fg-subtle);
+	font-size: var(--flit-font-size-xs);
+}
+
+/* ==========================================================================
+ * Wrapper
+ *
+ * The wrapper every FlitAgent screen sits in: the boards' frame on the background token, the focus outline and the
+ * reduced-motion rules. Last, so it is the base the sections above refine only where they say so.
+ * ========================================================================== */
+
+.flitagent-wrap {
+	box-sizing: border-box;
+	max-width: var(--flit-size-content-max);
+	/*
+	 * The boards' frame (e2e 2026-10-30, M6): with #wpcontent's 20px gutter the header starts 48px from the admin
+	 * menu and 28px below the bar on every screen; raw px are the boards' where no token has them.
+	 */
+	margin: 0 var(--flit-space-5) 0 0;
+	padding: 28px 28px 40px;
+	border-radius: var(--flit-radius-xl);
+	background: var(--flit-color-bg);
+	color: var(--flit-color-fg);
+	font-family: var(--flit-font-sans);
+	font-size: var(--flit-font-size-base);
+	line-height: var(--flit-line-height-base);
+}
+
+.flitagent-wrap *,
+.flitagent-wrap *::before,
+.flitagent-wrap *::after {
+	box-sizing: border-box;
+}
+
+/*
+ * A5: a 2px focus outline with 2px offset, inside the wrapper only. Core gives buttons, inputs and links a
+ * transparent outline and a box-shadow ring on :focus; these selectors outrank them.
+ */
+.flitagent-wrap :focus-visible,
+.flitagent-wrap a:focus-visible,
+.flitagent-wrap .button:focus-visible,
+.flitagent-wrap .button-link:focus-visible,
+.flitagent-wrap input:focus-visible,
+.flitagent-wrap select:focus-visible,
+.flitagent-wrap textarea:focus-visible,
+.flitagent-wrap summary:focus-visible {
+	outline: var(--flit-border-width-focus) solid var(--flit-color-focus);
+	outline-offset: 2px;
+	box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.flitagent-wrap *,
+	.flitagent-wrap *::before,
+	.flitagent-wrap *::after {
+		animation-duration: 0ms !important;
+		transition-duration: 0ms !important;
+	}
+}
+
+@media screen and (max-width: 600px) {
+	.flitagent-wrap {
+		margin-right: var(--flit-space-2);
+		padding: var(--flit-space-4);
+	}
+}

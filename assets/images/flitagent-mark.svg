@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="104" height="104" viewBox="12 4 104 104" fill="none" role="img"><title>FlitAgent</title>
+<defs><radialGradient id="flit-mark-bird" cx="34%" cy="28%" r="78%"><stop offset="0" stop-color="#4a514c"/><stop offset=".5" stop-color="#1f2320"/><stop offset="1" stop-color="#0b0c0b"/></radialGradient><linearGradient id="flit-mark-wing" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2f8f7e"/><stop offset="1" stop-color="#0e554e"/></linearGradient><radialGradient id="flit-mark-belly" cx="45%" cy="30%" r="75%"><stop offset="0" stop-color="#fffaf0"/><stop offset="1" stop-color="#d9ceb4"/></radialGradient><linearGradient id="flit-mark-beak" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6c16b"/><stop offset="1" stop-color="#e08a3a"/></linearGradient><clipPath id="flit-mark-clip">
+<ellipse cx="58" cy="64" rx="44" ry="42"/></clipPath></defs>
+
+<path d="M50 22c-3-8 2-14 9-15-2 3-2 6 0 9 2-6 8-9 14-7-4 2-6 5-6 9" fill="#1a1d1b"/>
+<ellipse cx="58" cy="64" rx="44" ry="42" fill="url(#flit-mark-bird)"/>
+<g clip-path="url(#flit-mark-clip)">
+<ellipse cx="76" cy="92" rx="30" ry="24" fill="url(#flit-mark-belly)"/>
+<path d="M46 50c8 5 12 15 10 26-2 10-10 17-21 19-7 1-12 4-17 9 2-7 3-13 2-20-2-15 9-34 26-34z" fill="url(#flit-mark-wing)"/>
+</g>
+<path d="M98 60c8 1 14 4 16 7-3 3-9 4-16 3z" fill="url(#flit-mark-beak)"/>
+<ellipse cx="80" cy="52" rx="10" ry="12" fill="#fcfbf6"/>
+<ellipse cx="83" cy="54" rx="5.6" ry="7.2" fill="#111"/>
+<circle cx="85.5" cy="50.5" r="2.2" fill="#fff"/>
+</svg>

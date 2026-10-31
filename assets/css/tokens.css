@@ -1,0 +1,202 @@
+/*
+ * FlitAgent design tokens: the custom properties of the @flit/design package (version 0.1.0, pinned commit
+ * f403a97836e70df1c02a14d950b23401d3447a25), as its light-vars and reduced-motion-vars mixins declare them, on
+ * .flitagent-wrap only, never on the document root. The design files are licensed GPL-2.0-or-later, like this plugin.
+ * Loaded before admin.css on FlitAgent's own screens (Admin::enqueue); the only file with hex colours. To change a
+ * token, change it in @flit/design and copy the new values here.
+ */
+
+/*
+ * The one rule outside the wrapper. The sheets load on FlitAgent's screens only, so the page behind the wrapper takes
+ * the wrapper's background and the screen reads as one surface from the admin menu to the footer (owner, 2026-10-28).
+ * The colour is --flit-color-bg's value, written out: the custom properties stay on the wrapper.
+ */
+#wpwrap {
+	background: #f5f2e8;
+}
+
+.flitagent-wrap {
+	--flit-color-neutral-0: #ffffff;
+	--flit-color-neutral-25: #fafafa;
+	--flit-color-neutral-50: #f4f4f5;
+	--flit-color-neutral-100: #e9e9eb;
+	--flit-color-neutral-200: #e4e4e7;
+	--flit-color-neutral-300: #d4d4d8;
+	--flit-color-neutral-350: #a1a1aa;
+	--flit-color-neutral-400: #8c8c94;
+	--flit-color-neutral-500: #71717a;
+	--flit-color-neutral-600: #52525b;
+	--flit-color-neutral-700: #3f3f46;
+	--flit-color-neutral-800: #27272a;
+	--flit-color-neutral-900: #18181b;
+	--flit-color-neutral-925: #131316;
+	--flit-color-neutral-950: #0e0e10;
+	--flit-color-accent-50: #effaf8;
+	--flit-color-accent-300: #5eead4;
+	--flit-color-accent-400: #2dd4bf;
+	--flit-color-accent-700: #0d6b61;
+	--flit-color-accent-800: #0e554e;
+	--flit-color-accent-950: #0f2a27;
+	--flit-color-warm-canvas: #f5f2e8;
+	--flit-color-warm-paper: #fcfbf6;
+	--flit-color-warm-sunken: #f2efe4;
+	--flit-color-warm-hover: #ebe7d8;
+	--flit-color-warm-ink: #1c1f1c;
+	--flit-color-warm-ink-muted: #5c5f58;
+	--flit-color-warm-ink-subtle: #6b6e66;
+	--flit-color-warm-ink-faint: #8a8c84;
+	--flit-color-warm-border: #e4dfcf;
+	--flit-color-warm-border-raised: #ddd8c6;
+	--flit-color-warm-teal-hover: #0b443e;
+	--flit-color-warm-teal-tint: #e3ece7;
+	--flit-color-bg: #f5f2e8;
+	--flit-color-surface: #fcfbf6;
+	--flit-color-surface-raised: #fcfbf6;
+	--flit-color-surface-sunken: #f2efe4;
+	--flit-color-surface-hover: #ebe7d8;
+	--flit-color-fg: #1c1f1c;
+	--flit-color-fg-muted: #5c5f58;
+	--flit-color-fg-subtle: #6b6e66;
+	--flit-color-border: #e4dfcf;
+	--flit-color-border-raised: #ddd8c6;
+	--flit-color-border-strong: #8a8c84;
+	--flit-color-accent: #0e554e;
+	--flit-color-accent-hover: #0b443e;
+	--flit-color-accent-fg: #fcfbf6;
+	--flit-color-accent-tint: #e3ece7;
+	--flit-color-link: #0e554e;
+	--flit-color-focus: #0e554e;
+	--flit-color-info-fg: #135e96;
+	--flit-color-info-bg: #f0f6fc;
+	--flit-color-info-icon: #2271b1;
+	--flit-color-success-fg: #007017;
+	--flit-color-success-bg: #edfaef;
+	--flit-color-success-icon: #00a32a;
+	--flit-color-warning-fg: #946300;
+	--flit-color-warning-bg: #fcf9e8;
+	--flit-color-warning-icon: #dba617;
+	--flit-color-danger-fg: #b32d2e;
+	--flit-color-danger-bg: #fcf0f1;
+	--flit-color-danger-icon: #d63638;
+	--flit-color-reverted-fg: #5b21b6;
+	--flit-color-reverted-bg: #f5f3ff;
+	--flit-color-reverted-icon: #7c3aed;
+	--flit-color-neutral-fg: #5c5f58;
+	--flit-color-neutral-bg: #f2efe4;
+	--flit-color-neutral-icon: #6b6e66;
+	--flit-font-sans: "Inter", system-ui, sans-serif;
+	--flit-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	--flit-font-mono-scale: 0.92em;
+	--flit-font-weight-regular: 400;
+	--flit-font-weight-medium: 500;
+	--flit-font-weight-semibold: 600;
+	--flit-font-size-xs: 0.75rem;
+	--flit-font-size-sm: 0.8125rem;
+	--flit-font-size-base: 0.875rem;
+	--flit-font-size-md: 1rem;
+	--flit-font-size-lg: 1.125rem;
+	--flit-font-size-xl: 1.25rem;
+	--flit-font-size-2xl: 1.5rem;
+	--flit-font-size-3xl: clamp(1.75rem, 4vw, 2.25rem);
+	--flit-font-size-4xl: clamp(2.25rem, 6vw, 3.75rem);
+	--flit-line-height-xs: 1rem;
+	--flit-line-height-sm: 1.25rem;
+	--flit-line-height-base: 1.375rem;
+	--flit-line-height-md: 1.625rem;
+	--flit-line-height-lg: 1.75rem;
+	--flit-line-height-xl: 1.75rem;
+	--flit-line-height-2xl: 2rem;
+	--flit-line-height-3xl: 1.15;
+	--flit-line-height-4xl: 1.05;
+	--flit-letter-spacing-4xl: -0.02em;
+	--flit-space-1: 4px;
+	--flit-space-2: 8px;
+	--flit-space-3: 12px;
+	--flit-space-4: 16px;
+	--flit-space-5: 20px;
+	--flit-space-6: 24px;
+	--flit-space-8: 32px;
+	--flit-space-10: 40px;
+	--flit-space-12: 48px;
+	--flit-space-16: 64px;
+	--flit-space-20: 80px;
+	--flit-space-24: 96px;
+	--flit-radius-sm: 4px;
+	--flit-radius-md: 8px;
+	--flit-radius-lg: 12px;
+	--flit-radius-xl: 18px;
+	--flit-radius-full: 999px;
+	--flit-border-width-hairline: 1px;
+	--flit-border-width-focus: 2px;
+	--flit-border-width-notice-bar: 4px;
+	--flit-shadow-card: 0 1px 0 rgb(28 31 28 / 0.08), 0 12px 32px -18px rgb(28 31 28 / 0.18);
+	--flit-shadow-button: inset 0 1px 0 rgb(252 251 246 / 0.18), 0 10px 22px -12px rgb(14 85 78 / 0.8);
+	--flit-shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.12);
+	--flit-overlay-backdrop: rgb(0 0 0 / 0.4);
+	--flit-duration-fast: 120ms;
+	--flit-duration-base: 180ms;
+	--flit-ease-out: cubic-bezier(0.2, 0, 0, 1);
+	--flit-z-index-base: 0;
+	--flit-z-index-sticky: 10;
+	--flit-z-index-dropdown: 100;
+	--flit-z-index-overlay: 1000;
+	--flit-z-index-modal: 1010;
+	--flit-z-index-toast: 1020;
+	--flit-breakpoint-sm: 600px;
+	--flit-breakpoint-md: 782px;
+	--flit-breakpoint-lg: 1080px;
+	--flit-breakpoint-xl: 1440px;
+	--flit-size-content-max: 1200px;
+	--flit-size-prose-max: 680px;
+	--flit-color-site-canvas: #f5f2e8;
+	--flit-color-site-paper: #fcfbf6;
+	--flit-color-site-sunken: #f2efe4;
+	--flit-color-site-ink: #1c1f1c;
+	--flit-color-site-ink-muted: #5c5f58;
+	--flit-color-site-ink-faint: #8a8c84;
+	--flit-color-site-accent: #0e554e;
+	--flit-color-site-accent-hover: #0b443e;
+	--flit-color-site-accent-tint: #e3ece7;
+	--flit-color-site-accent-bright: #127a68;
+	--flit-color-site-accent-deep: #0b5c52;
+	--flit-color-site-band: #0d3b35;
+	--flit-color-site-band-accent: #8fd3c2;
+	--flit-color-site-band-soft: #a9e3d4;
+	--flit-color-site-danger: #8a3b2e;
+	--flit-color-site-danger-soft: #f0a28f;
+	--flit-color-site-success: #1f5c3d;
+	--flit-color-art-ink-hi: #4a514c;
+	--flit-color-art-ink: #1f2320;
+	--flit-color-art-ink-lo: #0b0c0b;
+	--flit-color-art-teal-hi: #2f8f7e;
+	--flit-color-art-cream-hi: #fffaf0;
+	--flit-color-art-cream-lo: #d9ceb4;
+	--flit-color-art-page-lo: #e9e1cc;
+	--flit-color-art-fold-hi: #f3ecd9;
+	--flit-color-art-sand: #cdbf9c;
+	--flit-color-art-amber-hi: #f6c16b;
+	--flit-color-art-amber-lo: #e08a3a;
+	--flit-color-art-mint-hi: #8fd3c2;
+	--flit-color-art-mint: #3f9a86;
+	--flit-color-art-mint-lo: #1f6a5c;
+	--flit-color-art-mint-ink: #0d2e28;
+	--flit-color-art-coral-hi: #ffb39c;
+	--flit-color-art-coral: #e5795d;
+	--flit-color-art-coral-lo: #b34e37;
+	--flit-color-art-coral-ink: #3d1810;
+	--flit-color-art-blush: #ef8f86;
+	--flit-color-art-line: #bfe7dc;
+	--flit-font-display: "Newsreader", ui-serif, Georgia, serif;
+	--flit-color-brand-chatgpt: #000000;
+	--flit-color-brand-chatgpt-fg: #ffffff;
+	--flit-color-brand-claude: #d97757;
+	--flit-color-brand-claude-fg: #141413;
+}
+
+/* Motion off where the visitor asks for less: the duration tokens are zero. */
+@media (prefers-reduced-motion: reduce) {
+	.flitagent-wrap {
+		--flit-duration-fast: 0ms;
+		--flit-duration-base: 0ms;
+	}
+}
