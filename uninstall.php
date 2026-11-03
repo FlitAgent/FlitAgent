@@ -13,7 +13,7 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
 
-require_once __DIR__ . '/includes/Autoloader.php';
+require_once __DIR__ . '/includes/class-autoloader.php';
 Autoloader::register();
 
 Uninstall::run();

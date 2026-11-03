@@ -6,7 +6,7 @@
 
 ## What the beta does
 
-This version (0.9.0) is a beta, and it is read-only: AI tools can read and check the site, but no tool changes anything. Tools that make changes may come in a later version.
+This version (0.9.1) is a beta, and it is read-only: AI tools can read and check the site, but no tool changes anything. Tools that make changes may come in a later version.
 
 - **Reads the site.** Site details and health, plugins and themes, recent content, content search, core updates and comment counts.
 - **Finds what is wrong.** `get_health_triage` checks the whole site at once and lists each problem, how serious it is and what to do about it in wp-admin. `get_update_readiness` checks pending updates before you apply them, and `get_content_qa` finds missing alt text, broken internal links, SEO basics and stale content.
@@ -32,7 +32,7 @@ This version (0.9.0) is a beta, and it is read-only: AI tools can read and check
 └──────────────────────────────┘
 ```
 
-FlitAgent needs the flitagent.com service and a free flitagent.com account. Your AI app talks to flitagent.com, which relays each request to your site; the site checks the request's signature and answers. Tool calls and results pass through flitagent.com in transit and are not stored there. flitagent.com keeps usage metadata: raw events for 90 days and daily totals for 25 months. See the [terms](https://flitagent.com/terms/) and [privacy policy](https://flitagent.com/privacy/).
+FlitAgent needs the flitagent.com service and a free flitagent.com account. Your AI app talks to flitagent.com, which relays each request to your site; the site checks the request's signature and answers. Tool calls and results pass through flitagent.com in transit and are not stored there. flitagent.com keeps usage metadata: raw events for 90 days and daily totals for 25 months. flitagent.com also stores this site's name, address and access, its FlitAgent, WordPress and PHP versions, and which AI tools are disconnected, and caches the list of tools. See the [terms](https://flitagent.com/terms/) and [privacy policy](https://flitagent.com/privacy/).
 
 ## Tools your AI app gets
 
