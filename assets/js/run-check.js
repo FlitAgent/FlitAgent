@@ -108,7 +108,8 @@
 				throw new Error( 'Not OK' );
 			}
 			const card = new DOMParser().parseFromString( await response.text(), 'text/html' ).querySelector( RunCheck.CARD );
-			if ( ! card || ! document.querySelector( RunCheck.CARD ) ) {
+			// Another step's card means the link's nonce has expired: follow the link rather than swap that card in.
+			if ( ! card || ! document.querySelector( RunCheck.CARD ) || ! card.classList.contains( RunCheck.CHECK_CARD ) ) {
 				throw new Error( 'No card' );
 			}
 			return card;
@@ -138,6 +139,13 @@
 	 * @private
 	 */
 	RunCheck.CARD = '.flitagent-onboarding > .flitagent-card';
+
+	/**
+	 * Class of the check step's card.
+	 *
+	 * @private
+	 */
+	RunCheck.CHECK_CARD = 'flitagent-onboarding-card--check';
 
 	ns.RunCheck = RunCheck;
 } )();

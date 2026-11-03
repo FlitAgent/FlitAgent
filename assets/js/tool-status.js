@@ -322,6 +322,12 @@
 			} else if ( '' !== setup ) {
 				url.searchParams.set( 'setup', setup );
 			}
+			if ( '' !== done || '' !== setup ) {
+				url.searchParams.set(
+					'_wpnonce',
+					this.list.getAttribute( ToolStatus.VIEW_NONCE ) ?? ''
+				);
+			}
 			this.win.location.replace( url.toString() );
 		}
 	}
@@ -335,6 +341,11 @@
 	 * Attribute of the tool list: the `wp_rest` nonce.
 	 */
 	ToolStatus.NONCE = 'data-flitagent-nonce';
+
+	/**
+	 * Attribute of the tool list: the nonce a link to a dialog carries.
+	 */
+	ToolStatus.VIEW_NONCE = 'data-flitagent-view-nonce';
 
 	/**
 	 * Attribute the script puts on the tool list while it is checking; the Set up dialogs' waiting line shows only then.
