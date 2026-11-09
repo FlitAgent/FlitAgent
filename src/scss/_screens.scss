@@ -1,0 +1,462 @@
+// Layout of single screens, inside .flitagent-wrap only.
+
+.flitagent-wrap {
+
+	// Approvals: give the change summary room at desktop widths.
+	@media screen and (min-width: 783px) {
+
+		.flitagent-changes .column-summary {
+			width: 30%;
+		}
+	}
+
+	// Approve and Reject: at least 8px apart (A7), the primary first. A link beside a button sits on its centre line.
+	.flitagent-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--flit-space-3);
+		margin: var(--flit-space-6) 0;
+	}
+
+	// The Connect screen's Disconnect form sits in the action row.
+	.flitagent-inline-form {
+		margin: 0;
+	}
+
+	// Activity: filters and paging.
+	.flitagent-filters {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: var(--flit-space-2);
+		margin: 0 0 var(--flit-space-4);
+	}
+
+	.flitagent-filter {
+		display: inline-flex;
+		flex-direction: column;
+		gap: var(--flit-space-1);
+
+		span {
+			color: var(--flit-color-fg-muted);
+			font-size: var(--flit-font-size-sm);
+			font-weight: var(--flit-font-weight-medium);
+		}
+	}
+
+	.flitagent-pages {
+		display: flex;
+		gap: var(--flit-space-2);
+	}
+
+	// The Set up dialogs: a value to copy in a code box with its Copy button, label above.
+	.flitagent-field label {
+		display: block;
+		margin: 0 0 var(--flit-space-1);
+		font-size: var(--flit-font-size-sm);
+		font-weight: var(--flit-font-weight-medium);
+		line-height: 1.55;
+	}
+
+	.flitagent-copy-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--flit-space-2);
+
+		input {
+			flex: 1 1 280px;
+			width: auto;
+			min-width: 0;
+			max-width: 100%;
+			min-height: 0;
+			padding: var(--flit-space-2) var(--flit-space-3);
+			border-color: var(--flit-color-border);
+			border-radius: var(--flit-radius-md);
+			background-color: var(--flit-color-surface-sunken);
+			color: var(--flit-color-fg);
+			font-family: var(--flit-font-mono);
+			font-size: 12.5px;
+			line-height: 1.55;
+		}
+
+		.button {
+			min-height: 36px;
+			padding: 0 14px;
+			font-size: var(--flit-font-size-sm);
+		}
+	}
+
+	.flitagent-links {
+		color: var(--flit-color-fg-muted);
+	}
+
+	// Setup guide.
+	// The check step's links while the checks run: a spinner before the text.
+	a[data-flitagent-run].is-running {
+		pointer-events: none;
+		opacity: 0.8;
+
+		&::before {
+			content: "";
+			display: inline-block;
+			width: 0.9em;
+			height: 0.9em;
+			margin-right: 0.5em;
+			vertical-align: -0.1em;
+			border: 2px solid currentcolor;
+			border-right-color: transparent;
+			border-radius: 50%;
+			animation: flitagent-spin 0.8s linear infinite;
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			&::before {
+				animation: none;
+			}
+		}
+	}
+
+	// The check step while the checks run: an endless bar under the message.
+	.flitagent-checking-text {
+		margin: 0 0 var(--flit-space-3);
+		font-weight: var(--flit-font-weight-medium);
+	}
+
+	.flitagent-progress {
+		position: relative;
+		height: 6px;
+		overflow: hidden;
+		border-radius: 3px;
+		background: var(--flit-color-surface-sunken);
+
+		span {
+			position: absolute;
+			top: 0;
+			bottom: 0;
+			width: 40%;
+			border-radius: 3px;
+			background: var(--flit-color-accent);
+			animation: flitagent-progress 1.2s ease-in-out infinite;
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			span {
+				left: 0;
+				width: 100%;
+				animation: none;
+				opacity: 0.6;
+			}
+		}
+	}
+
+	// Setup guide (the wrap carries .flitagent-onboarding); its frame is in _onboarding.scss.
+	&.flitagent-onboarding fieldset label {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--flit-space-2);
+		min-height: 24px;
+	}
+
+	// The guide's What may AI tools do on this site?: each choice is a card, the chosen one tinted.
+	.flitagent-choices {
+		display: flex;
+		flex-direction: column;
+		gap: var(--flit-space-3);
+		margin: 0 0 var(--flit-space-4);
+
+		legend {
+			margin: 0 0 var(--flit-space-3);
+			padding: 0;
+			font-weight: var(--flit-font-weight-semibold);
+		}
+	}
+
+	&.flitagent-onboarding .flitagent-choices label.flitagent-choice,
+	.flitagent-choice {
+		display: flex;
+		align-items: center;
+		gap: var(--flit-space-3);
+		min-height: 48px;
+		padding: var(--flit-space-2) var(--flit-space-4);
+		border: var(--flit-border-width-hairline) solid var(--flit-color-border);
+		border-radius: var(--flit-radius-md);
+		background: var(--flit-color-surface);
+		cursor: pointer;
+
+		input {
+			flex: none;
+			margin: 0;
+		}
+
+		&:has(input:checked) {
+			border-color: var(--flit-color-accent);
+			background: var(--flit-color-accent-tint);
+		}
+	}
+
+	// The guide's What may AI tools do on this site? (step 4) as the Changes board draws it: 10px between the cards, each
+	// at least 50px tall, the radio with the board's 3px 3px 0 5px around it (15px before its text). The frame
+	// (_onboarding.scss) spaces the fieldset and the note.
+	&.flitagent-onboarding .flitagent-choices {
+		gap: 10px;
+	}
+
+	&.flitagent-onboarding .flitagent-choices label.flitagent-choice {
+		min-height: 50px;
+
+		input {
+			margin: 3px 3px 0 5px;
+		}
+	}
+
+	// An AI tool's steps in its Set up dialog: its parts 14px apart like the dialog's, the steps 8px apart, a
+	// step's fields 10px apart. The notes under a command and the guide link are small and muted.
+	.flitagent-app-panel {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+
+		p {
+			margin: 0;
+		}
+
+		ol {
+			display: flex;
+			flex-direction: column;
+			gap: var(--flit-space-2);
+			margin: 0;
+			padding-left: 22px;
+		}
+
+		li {
+			margin: 0;
+		}
+
+		li > a {
+			font-weight: var(--flit-font-weight-semibold);
+		}
+
+		.flitagent-fields {
+			display: flex;
+			flex-direction: column;
+			gap: 10px;
+		}
+
+		.description,
+		.flitagent-guide-link {
+			color: var(--flit-color-fg-muted);
+			font-size: var(--flit-font-size-sm);
+			line-height: 1.55;
+		}
+
+		.description code {
+			padding: 0;
+			border-radius: 0;
+			background: none;
+			color: inherit;
+			font-family: var(--flit-font-mono);
+			font-size: 12.5px;
+		}
+	}
+
+	.flitagent-external-icon {
+		margin-left: 2px;
+		vertical-align: -1px;
+	}
+
+	// The setup guide's Connect step: the Connect screen's two cards as boxes inside the step card (the action
+	// row under a rule is the frame's, _onboarding.scss). Connect to flitagent.com is the board's 40px pill.
+	.flitagent-connect-box {
+		margin: 14px 0;
+		padding: var(--flit-space-5) var(--flit-space-6);
+		border: var(--flit-border-width-hairline) solid var(--flit-color-border);
+		border-radius: var(--flit-radius-md);
+
+		h3 {
+			margin: 0 0 14px;
+			letter-spacing: -0.01em;
+		}
+
+		// The row's second line on the step card's 1.55 line, as on the board.
+		.flitagent-tool-sub {
+			line-height: inherit;
+		}
+
+		p {
+			margin: 14px 0;
+		}
+
+		> :last-child,
+		form > p:nth-last-child(2) {
+			margin-bottom: 0;
+		}
+
+		> form .button {
+			min-height: 40px;
+			padding: 0 22px;
+		}
+
+		@media screen and (max-width: 600px) {
+			padding: var(--flit-space-4);
+		}
+	}
+
+	// The Set up dialogs sit in the step card, whose children have no margins: a modal one keeps the auto margins that
+	// centre it.
+	.flitagent-onboarding-card > .flitagent-dialog:modal {
+		margin: auto;
+	}
+
+	// Chips on the Connect screen's cards and in setup step 3: a 13px glyph, 2px 9px, on the body's 1.55 line (here, not
+	// in _connect.scss, which shares no class with _manage.scss).
+	.flitagent-connectivity,
+	.flitagent-tools-card,
+	.flitagent-connect-box {
+
+		.flitagent-chip {
+			padding: 2px 9px;
+			line-height: 1.55;
+		}
+
+		.flitagent-chip-icon {
+			width: 13px;
+			height: 13px;
+		}
+
+		// The glyph in the role's icon colour where the board draws one (Connected).
+		.flitagent-chip--success .flitagent-chip-icon {
+			color: var(--flit-color-success-icon);
+		}
+
+		.flitagent-tool-chip {
+			line-height: 1.55;
+		}
+	}
+
+	// The Connect step's progress: labels above circles on a thick rounded track, filled up to the current step.
+	.flitagent-steps-wrap {
+		padding: 6px 0 22px;
+		border-bottom: var(--flit-border-width-hairline) solid var(--flit-color-border);
+	}
+
+	.flitagent-steps {
+		position: relative;
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		width: 520px;
+		max-width: 100%;
+		margin: 0 auto;
+		padding: 0;
+		list-style: none;
+
+		// The track, then its fill: under the circles' centres.
+		&::before,
+		&::after {
+			content: "";
+			position: absolute;
+			bottom: 12px;
+			left: 0;
+			height: 6px;
+			border-radius: 3px;
+			background: var(--flit-color-border);
+		}
+
+		&::before {
+			right: 0;
+		}
+
+		&::after {
+			width: 25%;
+			background: var(--flit-color-accent);
+		}
+
+		&.flitagent-steps--tools::after {
+			width: 75%;
+		}
+
+		&.flitagent-steps--done::after {
+			width: 100%;
+		}
+	}
+
+	.flitagent-steps-item {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--flit-space-3);
+		min-width: 0;
+		margin: 0;
+	}
+
+	.flitagent-steps-label {
+		color: var(--flit-color-accent);
+		font-size: var(--flit-font-size-xs);
+		font-weight: var(--flit-font-weight-semibold);
+		line-height: 16px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		white-space: nowrap;
+	}
+
+	.is-upcoming .flitagent-steps-label {
+		color: var(--flit-color-fg-subtle);
+	}
+
+	.flitagent-steps-dot {
+		position: relative;
+		z-index: 1;
+		display: inline-flex;
+		flex: none;
+		align-items: center;
+		justify-content: center;
+		width: 30px;
+		height: 30px;
+		border-radius: var(--flit-radius-full);
+		background: var(--flit-color-border);
+
+		svg {
+			stroke-width: 3;
+		}
+
+		// Forced colours drop the fills: outline every circle and keep the check.
+		@media (forced-colors: active) {
+			border: 3px solid CanvasText;
+		}
+	}
+
+	.is-done .flitagent-steps-dot {
+		background: var(--flit-color-accent);
+		color: var(--flit-color-neutral-0);
+	}
+
+	.is-current .flitagent-steps-dot {
+		border: 3px solid var(--flit-color-accent);
+		background: var(--flit-color-surface);
+	}
+
+	@media screen and (max-width: 600px) {
+
+		.flitagent-steps-label {
+			white-space: normal;
+			text-align: center;
+		}
+	}
+}
+
+@keyframes flitagent-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@keyframes flitagent-progress {
+	from {
+		left: -40%;
+	}
+
+	to {
+		left: 100%;
+	}
+}

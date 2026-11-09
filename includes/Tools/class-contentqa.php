@@ -15,7 +15,7 @@ use FlitAgent\Tools\Triage\ContentSnapshot;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Content QA (#121): content problems and what to do about each in wp-admin.
+ * Content QA (#121): content problems and the FlitAgent tool that fixes each.
  */
 final class ContentQa implements Tool {
 
@@ -56,7 +56,7 @@ final class ContentQa implements Tool {
 		return Definition::read_only(
 			$this->name(),
 			'Check FlitAgent content quality',
-			'checks the site\'s content and returns findings, warnings first: media-library images and images in content without alt text, links to this site\'s own content that is missing, trashed or unpublished, empty and duplicate titles, items with neither an excerpt nor an SEO description (Yoast SEO or Rank Math), content under 300 words, published content not updated for 18 months, drafts untouched for 6 months, and categories or tags with no posts. Each finding has an id, severity, title and detail; the detail says in plain words what a person should do in wp-admin, and a broken link also has its target in url. FlitAgent only reads: it changes nothing on the site. Checks the most recently modified published items (limit, default 200) of post_types (default post and page); lists at most 200 findings (truncated says when more were found). Reads this site\'s database only and never fetches links.',
+			'checks the site\'s content and returns findings, warnings first: media-library images and images in content without alt text, links to this site\'s own content that is missing, trashed or unpublished, empty and duplicate titles, items with neither an excerpt nor an SEO description (Yoast SEO or Rank Math), content under 300 words, published content not updated for 18 months, drafts untouched for 6 months, and categories or tags with no posts. Each finding has an id, severity, title, detail and fix: the tool and arguments that fix it, plus fill, the arguments you must add yourself (for example alt_text or an excerpt you write), or null when only a person can fix it; a broken link also has its target in url. Submit several fixes as one plan with submit_plan. Checks the most recently modified published items (limit, default 200) of post_types (default post and page); lists at most 200 findings (truncated says when more were found). Reads this site\'s database only and never fetches links.',
 			array(
 				'post_types' => array(
 					'type'        => 'array',

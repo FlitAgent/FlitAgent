@@ -34,6 +34,47 @@ final class Arguments {
 	}
 
 	/**
+	 * A non-empty string argument.
+	 *
+	 * @param array<string, mixed> $arguments Arguments.
+	 * @param string               $name      Argument name.
+	 * @param bool                 $required  Whether it must be present.
+	 * @return string|null
+	 * @throws ToolError When missing (and required) or not a non-empty string.
+	 */
+	public static function string( array $arguments, string $name, bool $required ): ?string {
+		if ( ! array_key_exists( $name, $arguments ) || null === $arguments[ $name ] ) {
+			if ( $required ) {
+				throw new ToolError( sprintf( '%s is required.', esc_textarea( $name ) ) );
+			}
+			return null;
+		}
+		if ( ! is_string( $arguments[ $name ] ) || '' === $arguments[ $name ] ) {
+			throw new ToolError( sprintf( '%s must be a non-empty string.', esc_textarea( $name ) ) );
+		}
+		return $arguments[ $name ];
+	}
+
+	/**
+	 * A boolean argument.
+	 *
+	 * @param array<string, mixed> $arguments Arguments.
+	 * @param string               $name      Argument name.
+	 * @param bool                 $fallback  Value when absent.
+	 * @return bool
+	 * @throws ToolError When not a boolean.
+	 */
+	public static function bool( array $arguments, string $name, bool $fallback ): bool {
+		if ( ! array_key_exists( $name, $arguments ) || null === $arguments[ $name ] ) {
+			return $fallback;
+		}
+		if ( ! is_bool( $arguments[ $name ] ) ) {
+			throw new ToolError( sprintf( '%s must be true or false.', esc_textarea( $name ) ) );
+		}
+		return $arguments[ $name ];
+	}
+
+	/**
 	 * An integer argument within a range.
 	 *
 	 * @param array<string, mixed> $arguments Arguments.
@@ -53,6 +94,25 @@ final class Arguments {
 			throw new ToolError( sprintf( '%s must be an integer from %d to %d.', esc_textarea( $name ), (int) $min, (int) $max ) );
 		}
 		return $value;
+	}
+
+	/**
+	 * One of a fixed set of strings.
+	 *
+	 * @param array<string, mixed> $arguments Arguments.
+	 * @param string               $name      Argument name.
+	 * @param string[]             $choices   Allowed values.
+	 * @return string|null Null when absent.
+	 * @throws ToolError When not one of the choices.
+	 */
+	public static function enum( array $arguments, string $name, array $choices ): ?string {
+		if ( ! array_key_exists( $name, $arguments ) || null === $arguments[ $name ] ) {
+			return null;
+		}
+		if ( ! in_array( $arguments[ $name ], $choices, true ) ) {
+			throw new ToolError( sprintf( '%s must be one of: %s.', esc_textarea( $name ), esc_textarea( implode( ', ', $choices ) ) ) );
+		}
+		return $arguments[ $name ];
 	}
 
 	/**

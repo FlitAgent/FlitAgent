@@ -26,7 +26,7 @@ final class Client {
 	const MAX_NAME = 100;
 
 	/**
-	 * What the recorded client name adds to the app's name. The stored value keeps it; wp-admin shows the name
+	 * What the recorded client name adds to the app's name. Receipts and changes keep it; wp-admin shows the name
 	 * without it (display_name()).
 	 */
 	const VIA = ' (via flitagent.com)';
@@ -124,7 +124,7 @@ final class Client {
 	/**
 	 * The recorded client id: `fa:` and the first 40 hex digits of the SHA-256 of the connection id, a newline and
 	 * the app id. Every user of an app sends the same app id (Claude's CIMD URL), so binding the connection keeps a
-	 * re-pair (to another flitagent.com account) from inheriting the old connection's recorded client.
+	 * re-pair (to another flitagent.com account) from inheriting the old connection's approvals and idempotent replays.
 	 *
 	 * @param string $connection_id Connection the request was signed for.
 	 */
@@ -141,7 +141,7 @@ final class Client {
 
 	/**
 	 * A recorded client name as wp-admin shows it: the app's name, without the " (via flitagent.com)" every gateway
-	 * request's name ends with (the stored value keeps it). Any other name is
+	 * request's name ends with (the stored value keeps it, for receipts and the audit record). Any other name is
 	 * returned as stored.
 	 *
 	 * @param string $recorded The stored client name.

@@ -139,7 +139,8 @@ final class Content {
 				'image_alt:' . $image['id'],
 				'warning',
 				SiteText::message( 'Image "%s" has no alt text', $image['title'] ),
-				'Screen readers and search engines cannot tell what this media-library image shows. Add alt text in the Media Library.'
+				'Screen readers and search engines cannot tell what this media-library image shows. Add a short description of it as alt text.',
+				self::fix( 'update_media', array( 'attachment_id' => (int) $image['id'] ), array( 'alt_text' ) )
 			);
 		}
 		return $out;
@@ -168,7 +169,8 @@ final class Content {
 				'inline_alt:' . $post['id'],
 				'warning',
 				SiteText::message( '"%s" has images without alt text', $post['title'] ),
-				SiteText::message( '%d images in this %s have no alt text. Edit the %s and add alt text to each image block.', $missing, $post['type'], $post['type'] )
+				SiteText::message( '%d images in this %s have no alt text. Edit the %s and add alt text to each image block.', $missing, $post['type'], $post['type'] ),
+				null
 			);
 		}
 		return $out;
@@ -195,7 +197,8 @@ final class Content {
 					'broken_link:' . $post['id'] . ':' . substr( md5( $url ), 0, 12 ),
 					'warning',
 					SiteText::message( 'Broken link in "%s"', $post['title'] ),
-					sprintf( 'It links to the address in url, but %s, so visitors get an error page. Update or remove the link.', $what )
+					sprintf( 'It links to the address in url, but %s, so visitors get an error page. Update or remove the link.', $what ),
+					null
 				);
 				$finding['url'] = $url;
 				// Its own field: a URL stays exact, and prose is cleaned as text, which a query can break.
@@ -220,8 +223,9 @@ final class Content {
 			$out[] = self::finding(
 				'empty_title:' . $post['id'],
 				'warning',
-				sprintf( 'A published %s has no title', $post['type'] ),
-				sprintf( '%s %d has no title, which hurts search results and shows as "(no title)". Add a title in the editor.', ucfirst( (string) $post['type'] ), $post['id'] )
+				SiteText::message( 'A published %s has no title', $post['type'] ),
+				SiteText::message( '%s %d has no title, which hurts search results and shows as "(no title)".', ucfirst( (string) $post['type'] ), $post['id'] ),
+				self::fix( 'update_post', array( 'post_id' => (int) $post['id'] ), array( 'title' ) )
 			);
 		}
 		return $out;
@@ -250,7 +254,8 @@ final class Content {
 				'duplicate_title:' . substr( md5( (string) $key ), 0, 12 ),
 				'warning',
 				SiteText::message( '%d items share the title "%s"', count( $group ), trim( (string) $group[0]['title'] ) ),
-				sprintf( 'IDs %s have the same title, so search engines may treat them as duplicates. Give each a distinct title.', implode( ', ', array_column( $group, 'id' ) ) )
+				sprintf( 'IDs %s have the same title, so search engines may treat them as duplicates. Give each a distinct title.', implode( ', ', array_column( $group, 'id' ) ) ),
+				null
 			);
 		}
 		return $out;
@@ -272,7 +277,8 @@ final class Content {
 				'no_description:' . $post['id'],
 				'info',
 				SiteText::message( '"%s" has no description', $post['title'] ),
-				'There is no excerpt and no SEO meta description, so search engines and social shares pick their own snippet. Add a one or two sentence excerpt in the editor.'
+				'There is no excerpt and no SEO meta description, so search engines and social shares pick their own snippet. Add a one or two sentence excerpt.',
+				self::fix( 'update_post', array( 'post_id' => (int) $post['id'] ), array( 'excerpt' ) )
 			);
 		}
 		return $out;
@@ -288,14 +294,15 @@ final class Content {
 		$out = array();
 		foreach ( $posts as $post ) {
 			$words = self::word_count( (string) $post['content'] );
-			if ( $words >= self::THIN_WORDS ) {
+			if ( null === $words || $words >= self::THIN_WORDS ) {
 				continue;
 			}
 			$out[] = self::finding(
 				'thin_content:' . $post['id'],
 				'info',
 				SiteText::message( '"%s" is short', $post['title'] ),
-				sprintf( 'It has %d words. Pages under %d words rarely rank; expand it, merge it into a related page, or leave it if it is meant to be short (a contact page, for example).', $words, self::THIN_WORDS )
+				sprintf( 'It has %d words. Pages under %d words rarely rank; expand it, merge it into a related page, or leave it if it is meant to be short (a contact page, for example).', $words, self::THIN_WORDS ),
+				null
 			);
 		}
 		return $out;
@@ -322,7 +329,8 @@ final class Content {
 				'stale:' . $post['id'],
 				'info',
 				SiteText::message( '"%s" has not been updated in %d months', $post['title'], (int) floor( $days / 30 ) ),
-				'Check that it is still accurate; update facts, dates and links, or unpublish it if it no longer applies.'
+				'Check that it is still accurate; update facts, dates and links, or unpublish it if it no longer applies.',
+				null
 			);
 		}
 		return $out;
@@ -349,7 +357,8 @@ final class Content {
 				'old_draft:' . $draft['id'],
 				'info',
 				SiteText::message( 'Draft "%s" was abandoned', '' === trim( (string) $draft['title'] ) ? '(no title)' : $draft['title'] ),
-				sprintf( 'Nobody has touched this draft for %d months. Finish it or move it to the trash (it can be restored from there). Do it in wp-admin (Posts).', (int) floor( $days / 30 ) )
+				sprintf( 'Nobody has touched this draft for %d months. Finish it or move it to the trash (it can be restored from there).', (int) floor( $days / 30 ) ),
+				self::fix( 'trash_post', array( 'post_id' => (int) $draft['id'] ) )
 			);
 		}
 		return $out;
@@ -372,7 +381,14 @@ final class Content {
 				'empty_term:' . $term['taxonomy'] . ':' . $term['term_id'],
 				'info',
 				SiteText::message( '%s "%s" has no posts', 'category' === $term['taxonomy'] ? 'Category' : 'Tag', $term['name'] ),
-				'Its archive page is empty. Delete it in wp-admin (Posts, Categories or Tags), or assign posts to it.'
+				'Its archive page is empty. Delete it, or assign posts to it.',
+				self::fix(
+					'delete_term',
+					array(
+						'term_id'  => (int) $term['term_id'],
+						'taxonomy' => (string) $term['taxonomy'],
+					)
+				)
 			);
 		}
 		return $out;
@@ -394,29 +410,55 @@ final class Content {
 	 * Words in HTML content.
 	 *
 	 * @param string $html Content.
-	 * @return int
+	 * @return int|null Null when they could not be counted, which says nothing about the content.
 	 */
-	private static function word_count( string $html ): int {
-		$text = (string) preg_replace( '@<(script|style)[^>]*?>.*?</\\1>@si', '', $html );
-		$text = trim( (string) preg_replace( '/\s+/u', ' ', html_entity_decode( (string) preg_replace( '/<[^>]*>/', ' ', $text ), ENT_QUOTES ) ) );
+	private static function word_count( string $html ): ?int {
+		$text = preg_replace( '@<(script|style)(?=[\s/>])[^>]*+>(?:[^<]++|<(?!/\1(?=[\s/>])))*+(?:</\1(?=[\s/>])[^>]*+>|\z)@i', '', SiteText::without_open_ends( $html ) );
+		$text = null === $text ? null : preg_replace( '/<[^>]*>/', ' ', $text );
+		$text = null === $text ? null : preg_replace( '/\s+/u', ' ', html_entity_decode( $text, ENT_QUOTES ) );
+		if ( null === $text ) {
+			return null;
+		}
+		$text = trim( $text );
 		return '' === $text ? 0 : count( explode( ' ', $text ) );
 	}
 
 	/**
 	 * A finding (Triage shape).
 	 *
-	 * @param string $id       Stable id.
-	 * @param string $severity warning or info.
-	 * @param string $title    One line.
-	 * @param string $detail   What and what to do in wp-admin.
+	 * @param string                    $id       Stable id.
+	 * @param string                    $severity warning or info.
+	 * @param string                    $title    One line.
+	 * @param string                    $detail   What and what to do.
+	 * @param array<string, mixed>|null $fix      Fix or null.
 	 * @return array<string, mixed>
 	 */
-	private static function finding( string $id, string $severity, string $title, string $detail ): array {
+	private static function finding( string $id, string $severity, string $title, string $detail, ?array $fix ): array {
 		return array(
 			'id'       => $id,
 			'severity' => $severity,
 			'title'    => $title,
 			'detail'   => $detail,
+			'fix'      => $fix,
 		);
+	}
+
+	/**
+	 * A fix; `fill` names arguments the client must add (a value only a person or the model can write).
+	 *
+	 * @param string               $tool      Tool.
+	 * @param array<string, mixed> $arguments Arguments.
+	 * @param string[]             $fill      Arguments to add.
+	 * @return array<string, mixed>
+	 */
+	private static function fix( string $tool, array $arguments, array $fill = array() ): array {
+		$fix = array(
+			'tool'      => $tool,
+			'arguments' => $arguments,
+		);
+		if ( array() !== $fill ) {
+			$fix['fill'] = $fill;
+		}
+		return $fix;
 	}
 }

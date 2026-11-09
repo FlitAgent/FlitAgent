@@ -23,7 +23,8 @@ final class ContentSearch implements Tool {
 	const SNIPPET_LENGTH   = 160;
 
 	/**
-	 * Most bytes of a post cleaned for its snippet. A snippet is 160 characters, and this keeps the work on a huge post small.
+	 * Most bytes of a post's source that get a snippet, which keeps the work on a huge post small. A longer one gets none: cut
+	 * at this length it could keep an opening shortcode, script, style or comment without its close, and show what that hides.
 	 */
 	const SNIPPET_SOURCE_BYTES = 65536;
 
@@ -51,7 +52,7 @@ final class ContentSearch implements Tool {
 		return array(
 			'name'         => $this->name(),
 			'title'        => 'Search FlitAgent content',
-			'description'  => 'From the FlitAgent WordPress plugin: searches posts and pages for words in their title, excerpt or content, like the site\'s own search, most relevant first. Returns id, title, type, status, author display name, modified date, link and a short plain-text snippet (none for password-protected items); never the full content. Published items only, unless the logged-in user can edit other people\'s posts and pages; then drafts, pending, scheduled and private items too.',
+			'description'  => 'From the FlitAgent WordPress plugin: searches posts and pages for words in their title, excerpt or content, like the site\'s own search, most relevant first. Returns id, title, type, status, author display name, modified date, link and a short plain-text snippet (none for password-protected or very long items); never the full content. Published items only, unless the logged-in user can edit other people\'s posts and pages; then drafts, pending, scheduled and private items too.',
 			'inputSchema'  => array(
 				'type'                 => 'object',
 				'properties'           => array(
@@ -97,7 +98,7 @@ final class ContentSearch implements Tool {
 								'link'     => array( 'type' => array( 'string', 'null' ) ),
 								'snippet'  => array(
 									'type'        => array( 'string', 'null' ),
-									'description' => 'Plain-text start of the excerpt or content, at most 160 characters; null for password-protected or empty items.',
+									'description' => 'Plain-text start of the excerpt or content, at most 160 characters; null for password-protected, empty or very long items.',
 								),
 							),
 							'required'   => array( 'id', 'title', 'type', 'status', 'author', 'modified', 'link', 'snippet' ),
@@ -198,7 +199,7 @@ final class ContentSearch implements Tool {
 	 * Plain-text snippet: the excerpt, or else the content, without HTML, block markup or shortcodes.
 	 *
 	 * @param object $post WP_Post.
-	 * @return string|null Null for password-protected or empty items.
+	 * @return string|null Null for password-protected or empty items, and for a source over SNIPPET_SOURCE_BYTES.
 	 */
 	private static function snippet( $post ): ?string {
 		if ( '' !== (string) $post->post_password ) {
@@ -206,7 +207,10 @@ final class ContentSearch implements Tool {
 		}
 
 		$source = '' !== trim( (string) $post->post_excerpt ) ? (string) $post->post_excerpt : (string) $post->post_content;
-		$text   = trim( (string) preg_replace( '/\s+/u', ' ', SiteText::plain( strip_shortcodes( mb_strcut( $source, 0, self::SNIPPET_SOURCE_BYTES, 'UTF-8' ) ) ) ) );
+		if ( strlen( $source ) > self::SNIPPET_SOURCE_BYTES ) {
+			return null;
+		}
+		$text = trim( (string) preg_replace( '/\s+/u', ' ', SiteText::plain( strip_shortcodes( $source ) ) ) );
 
 		if ( '' === $text ) {
 			return null;

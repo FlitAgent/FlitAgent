@@ -79,9 +79,11 @@ final class Verified {
 	}
 
 	/**
-	 * The authentication context of the request: its client id is bound to the connection (Client::client_id()).
+	 * The authentication context of the request: its client id is bound to the connection (Client::client_id()). A request
+	 * from flitagent.com itself names no app, so it has none, and the write gateway refuses it.
 	 */
 	public function context(): Context {
-		return new Context( Context::GATEWAY, $this->scope(), $this->client->client_id( $this->connection->id() ), $this->client->client_name() );
+		$client_id = Apps::is_relay( $this->client ) ? '' : $this->client->client_id( $this->connection->id() );
+		return new Context( Context::GATEWAY, $this->scope(), $client_id, $this->client->client_name() );
 	}
 }

@@ -13,14 +13,14 @@ defined( 'ABSPATH' ) || exit;
  * Walks an administrator through FlitAgent in five steps (#209 follows the design of 2026-10-28): welcome, check if the
  * site is ready (#148), connect (the site to flitagent.com, then the AI tools, as on the Connect screen), what AI tools
  * may do on the site (the site's one access setting), done. The guide's own forms post to admin-post.php with the
- * Onboarding::ACTION action and nonce. Every dynamic value is escaped here, so callers may echo it.
+ * Onboarding::ACTION action and nonce. Every dynamic value is escaped here; Admin prints the result through wp_kses() with Ui::allowed_html().
  */
 final class OnboardingScreen {
 
 	/**
 	 * The screen for this site.
 	 *
-	 * @param array<string, mixed>|null $query The request's query arguments ($_GET).
+	 * @param array<string, mixed>      $query The request's sanitized query fields (Request::query()).
 	 * @param array<string, mixed>|null $facts Facts, or null for ConnectScreen::facts().
 	 * @param callable|null             $run   Runs the checks and returns Diagnostics results, or null for DiagnosticsScreen::run().
 	 * @return string
@@ -30,7 +30,7 @@ final class OnboardingScreen {
 		$facts = $facts ?? ConnectScreen::facts();
 		$run   = $run ?? array( DiagnosticsScreen::class, 'run' );
 		// The Connect step's Set up link without JavaScript (`&setup=<tool>`) opens that tool's dialog in the page, and
-		// tool-status.js comes back with `&flitagent_connected=<tool>` to show that it is connected.
+		// tool-status.ts comes back with `&flitagent_connected=<tool>` to show that it is connected.
 		$facts['setup'] = ConnectScreen::setup_tool( $query['setup'] ?? '' );
 		$facts['done']  = ConnectScreen::setup_tool( $query[ ConnectScreen::DONE ] ?? '' );
 		if ( ! self::runs_checks( $step, $facts, $query ) ) {
@@ -53,7 +53,7 @@ final class OnboardingScreen {
 	 *
 	 * @param string               $step  The step shown.
 	 * @param array<string, mixed> $facts Facts.
-	 * @param array<string, mixed> $query The request's query arguments ($_GET).
+	 * @param array<string, mixed> $query The request's sanitized query fields (Request::query()).
 	 * @return bool
 	 */
 	public static function runs_checks( string $step, array $facts, array $query ): bool {
@@ -66,7 +66,7 @@ final class OnboardingScreen {
 	/**
 	 * The step asked for (a removed step's replacement, see Onboarding::RENAMED), or welcome when it is missing or unknown.
 	 *
-	 * @param array<string, mixed> $query The request's query arguments ($_GET).
+	 * @param array<string, mixed> $query The request's sanitized query fields (Request::query()).
 	 * @return string One of Onboarding::STEPS.
 	 */
 	public static function step( array $query ): string {
@@ -103,6 +103,9 @@ final class OnboardingScreen {
 			case 'connect':
 				$html .= self::connect( $facts, $back );
 				break;
+			case 'changes':
+				$html .= self::changes( $facts, $back );
+				break;
 			case 'done':
 				$html .= self::done( $back );
 				break;
@@ -120,19 +123,19 @@ final class OnboardingScreen {
 	 */
 	private static function welcome(): string {
 		return '<h2>' . esc_html__( 'Welcome', 'flitagent' ) . '</h2>'
-			. '<p>' . esc_html__( 'FlitAgent connects this site to AI apps like ChatGPT and Claude. The app works through typed tools: it can read your content and check the site\'s health.', 'flitagent' ) . '</p>'
+			. '<p>' . esc_html__( 'FlitAgent connects this site to AI apps like ChatGPT and Claude. The app works through typed tools: it can read your content, check the site\'s health and, if you allow it, propose changes.', 'flitagent' ) . '</p>'
 			. '<p>' . esc_html__( 'Your site stays in your hands:', 'flitagent' ) . '</p><ul class="ul-disc">'
-			. '<li>' . esc_html__( 'The app can only read: it cannot change anything on your site.', 'flitagent' ) . '</li>'
-			. '<li>' . esc_html__( 'It acts as you, so it sees only what your administrator account can see.', 'flitagent' ) . '</li>'
-			. '<li>' . esc_html__( 'The app cannot run arbitrary code, only the tools FlitAgent offers.', 'flitagent' ) . '</li></ul>'
+			. '<li>' . esc_html__( 'Every change is previewed and waits for an administrator\'s approval in wp-admin, unless your policy approves low-risk changes automatically.', 'flitagent' ) . '</li>'
+			. '<li>' . esc_html__( 'Every change is recorded and can be rolled back, with some exceptions that show a warning first.', 'flitagent' ) . '</li>'
+			. '<li>' . esc_html__( 'The app can only use the tools FlitAgent offers, and anything that can run code waits for your approval, except abilities another plugin declares read-only.', 'flitagent' ) . '</li></ul>'
 			. self::actions( '<a href="' . esc_url( Onboarding::url( 'check' ) ) . '" class="button button-primary">' . esc_html__( 'Get started', 'flitagent' ) . '</a>' );
 	}
 
 	/**
 	 * Connect (#209): the Connect screen's two cards inside the step. A progress tracker, then Site connectivity (the
-	 * Connect to flitagent.com form, or the connection's facts) and Connected AI tools (Set up
+	 * Connect to flitagent.com form without an access choice, or the connection's facts) and Connected AI tools (Set up
 	 * opens the Connect screen's dialogs, inert until the site is connected). A site that cannot connect says why;
-	 * Continue goes on to the last step either way.
+	 * Continue goes on to the optional Changes step either way.
 	 *
 	 * @param array<string, mixed> $facts Facts.
 	 * @param string               $back  Escaped Back button for the action row.
@@ -145,7 +148,7 @@ final class OnboardingScreen {
 			. '<section class="flitagent-connect-box" aria-labelledby="flitagent-connectivity-title">' . ConnectScreen::status_section( $facts, true ) . '</section>'
 			. '<section class="flitagent-connect-box" aria-labelledby="flitagent-tools-title">' . ConnectScreen::tools_section( $facts, true ) . '</section>'
 			. ConnectScreen::dialogs( $facts, true )
-			. self::actions( '<a href="' . esc_url( Onboarding::url( 'done' ) ) . '" class="button button-primary">' . esc_html__( 'Continue', 'flitagent' ) . '</a>', $back, true );
+			. self::actions( '<a href="' . esc_url( Onboarding::url( 'changes' ) ) . '" class="button button-primary">' . esc_html__( 'Continue', 'flitagent' ) . '</a>', $back, true );
 	}
 
 	/**
@@ -178,6 +181,34 @@ final class OnboardingScreen {
 				. '<span class="flitagent-steps-dot" aria-hidden="true">' . ( 'done' === $state ? Ui::icon( 'check', 15 ) : '' ) . '</span></li>';
 		}
 		return $html . '</ol></div>';
+	}
+
+	/**
+	 * Changes: the site's one access setting for every connected AI tool (Read only or Read and propose changes), the
+	 * same as Access for AI tools in Settings. Connected tools follow it straight away; it can be changed later in
+	 * Settings.
+	 *
+	 * @param array<string, mixed> $facts Facts.
+	 * @param string               $back  Escaped Back button for the action row.
+	 * @return string
+	 */
+	private static function changes( array $facts, string $back ): string {
+		$mode  = empty( $facts['writes'] ) ? 'read' : 'write';
+		$title = __( 'What may AI tools do on this site?', 'flitagent' );
+
+		$fields = '<fieldset class="flitagent-choices"><legend class="screen-reader-text">' . esc_html( $title ) . '</legend>'
+			. '<label class="flitagent-choice"><input type="radio" name="mode" value="read"' . checked( $mode, 'read', false ) . ' /> '
+			/* translators: %s: "Read only". */
+			. '<span>' . sprintf( esc_html__( '%s — AI tools can look but not change anything', 'flitagent' ), '<strong>' . esc_html__( 'Read only', 'flitagent' ) . '</strong>' ) . '</span></label>'
+			. '<label class="flitagent-choice"><input type="radio" name="mode" value="write"' . checked( $mode, 'write', false ) . ' /> '
+			/* translators: %s: "Read and propose changes". */
+			. '<span>' . sprintf( esc_html__( '%s — AI tools can propose changes; each waits in Approvals unless your auto-approve settings allow it', 'flitagent' ), '<strong>' . esc_html__( 'Read and propose changes', 'flitagent' ) . '</strong>' ) . '</span></label></fieldset>'
+			. '<p class="description">' . esc_html__( 'You can change this at any time in FlitAgent → Settings.', 'flitagent' ) . '</p>'
+			. self::actions( '<button type="submit" class="button button-primary">' . esc_html__( 'Continue', 'flitagent' ) . '</button>', $back );
+
+		return '<h2>' . esc_html( $title ) . '</h2>'
+			. '<p>' . esc_html__( 'One setting for every AI tool connected to this site. Connected tools follow it straight away, with no need to reconnect.', 'flitagent' ) . '</p>'
+			. self::form( 'writes', $fields );
 	}
 
 	/**
@@ -275,7 +306,8 @@ final class OnboardingScreen {
 
 	/**
 	 * The check step while the checks run: a message and an endless progress bar. The script fetches the finished step
-	 * from the `data-flitagent-autorun` address and swaps it in; without it, the button runs the checks.
+	 * from the `data-flitagent-autorun` address and swaps it in; without it, or when it refuses the address, the button runs
+	 * the checks.
 	 *
 	 * @param string $back Escaped Back button.
 	 * @return string
@@ -288,6 +320,7 @@ final class OnboardingScreen {
 			. '<div class="flitagent-progress" aria-hidden="true"><span></span></div>'
 			. '<p class="description">' . esc_html__( 'FlitAgent is testing HTTPS, permalinks, the MCP endpoint and custom headers from this server. It takes a few seconds.', 'flitagent' ) . '</p>'
 			. '<noscript><p><a href="' . $run . '" class="button button-primary">' . esc_html__( 'Run the checks', 'flitagent' ) . '</a></p></noscript>'
+			. '<p class="flitagent-checking-run" hidden><a href="' . $run . '" class="button button-primary">' . esc_html__( 'Run the checks', 'flitagent' ) . '</a></p>'
 			. '</div>'
 			. self::actions( '', $back );
 	}
@@ -324,7 +357,8 @@ final class OnboardingScreen {
 	 */
 	private static function done( string $back ): string {
 		return '<h2>' . esc_html__( 'You\'re set', 'flitagent' ) . '</h2><ul class="ul-disc">'
-			. '<li><a href="' . esc_url( admin_url( 'admin.php?page=flitagent-settings' ) ) . '">' . esc_html__( 'Settings', 'flitagent' ) . '</a>: ' . esc_html__( 'the connection test and what happens on uninstall.', 'flitagent' ) . '</li>'
+			. '<li><a href="' . esc_url( admin_url( 'admin.php?page=flitagent-approvals' ) ) . '">' . esc_html__( 'Approvals', 'flitagent' ) . '</a>: ' . esc_html__( 'review changes the app proposes.', 'flitagent' ) . '</li>'
+			. '<li><a href="' . esc_url( admin_url( 'admin.php?page=flitagent-settings' ) ) . '">' . esc_html__( 'Settings', 'flitagent' ) . '</a>: ' . esc_html__( 'turn changes on or off and set the policy.', 'flitagent' ) . '</li>'
 			. '<li><a href="' . esc_url( admin_url( 'admin.php?page=' . ConnectScreen::SLUG ) ) . '">' . esc_html__( 'Connect', 'flitagent' ) . '</a>: ' . esc_html__( 'your flitagent.com connection and the MCP address.', 'flitagent' ) . '</li></ul>'
 			. self::form( 'finish', self::actions( '<button type="submit" class="button button-primary">' . esc_html__( 'Finish', 'flitagent' ) . '</button>', $back ) );
 	}
@@ -332,7 +366,7 @@ final class OnboardingScreen {
 	/**
 	 * A form posting to admin-post.php with the setup guide's action and nonce.
 	 *
-	 * @param string $verb   The `do` value: finish.
+	 * @param string $verb   The `do` value: writes or finish.
 	 * @param string $inside Escaped HTML inside the form.
 	 * @return string
 	 */

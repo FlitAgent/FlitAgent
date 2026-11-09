@@ -9,6 +9,7 @@ namespace FlitAgent\Mcp;
 
 use FlitAgent\Auth\Context;
 use FlitAgent\Auth\Gateway\Authenticator;
+use FlitAgent\Auth\Gateway\WpStore;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -22,7 +23,7 @@ final class RestController {
 	const ROUTE          = '/mcp';
 
 	/**
-	 * Response header with the fingerprint of the tool list (Server::tools_version()).
+	 * Response header with the fingerprint of the tool list at the paired scope.
 	 */
 	const TOOLS_VERSION_HEADER = 'FlitAgent-Tools-Version';
 
@@ -42,6 +43,13 @@ final class RestController {
 	 * @var Server
 	 */
 	private $server;
+
+	/**
+	 * Whether the connection is paired for writes (`fn(): bool`).
+	 *
+	 * @var callable
+	 */
+	private $paired_write;
 
 	/**
 	 * Whether this request's gateway signature was verified (`fn(): bool`).
@@ -68,6 +76,7 @@ final class RestController {
 	 * Constructor.
 	 *
 	 * @param Server        $server       MCP server.
+	 * @param callable|null $paired_write Whether the connection is paired for writes; defaults to the stored connection.
 	 * @param callable|null $verified     Whether this request's gateway signature was verified; defaults to
 	 *                                    Gateway\Authenticator::verified_this_request().
 	 * @param callable|null $disconnected The disconnected tool of this verified request ('' for none); defaults to
@@ -75,11 +84,20 @@ final class RestController {
 	 * @param callable|null $ended        Whether this verified request ended the connection; defaults to
 	 *                                    Gateway\Authenticator::site_ended().
 	 */
-	public function __construct( Server $server, ?callable $verified = null, ?callable $disconnected = null, ?callable $ended = null ) {
+	public function __construct( Server $server, ?callable $paired_write = null, ?callable $verified = null, ?callable $disconnected = null, ?callable $ended = null ) {
 		$this->server       = $server;
+		$this->paired_write = $paired_write ?? array( self::class, 'paired_write' );
 		$this->verified     = $verified ?? array( Authenticator::class, 'verified_this_request' );
 		$this->disconnected = $disconnected ?? array( Authenticator::class, 'disconnected_tool' );
 		$this->ended        = $ended ?? array( Authenticator::class, 'site_ended' );
+	}
+
+	/**
+	 * True only when a connection is stored and its paired scope is write.
+	 */
+	public static function paired_write(): bool {
+		$connection = ( new WpStore() )->connection();
+		return null !== $connection && Context::SCOPE_WRITE === $connection->scope();
 	}
 
 	/**
@@ -112,8 +130,8 @@ final class RestController {
 
 	/**
 	 * On an MCP route response: advertises POST as the only allowed method (the GET handler exists only to answer 405) and,
-	 * only when this request's gateway signature was verified and the status is not 401, adds `FlitAgent-Tools-Version`
-	 * (Server::tools_version()). flitagent.com takes the header as proof that the site verified its signature, so an
+	 * only when this request's gateway signature was verified and the status is not 401, adds `FlitAgent-Tools-Version`,
+	 * computed at the paired scope. flitagent.com takes the header as proof that the site verified its signature, so an
 	 * unsigned request (an `initialize` on an unpaired site, or one whose gateway headers were stripped) never gets it.
 	 * A verified request's 200 and 202 do (including a disconnected tool's JSON-RPC error from answer_disconnected_app()),
 	 * and so does the 403 `flitagent_pairing_user_lost_access` from rest_authentication_errors (returned only after
@@ -128,7 +146,7 @@ final class RestController {
 		if ( $response instanceof \WP_REST_Response && '' !== self::mcp_route( (string) $request->get_route() ) ) {
 			$response->header( 'Allow', 'POST' );
 			if ( 401 !== $response->get_status() && true === call_user_func( $this->verified ) ) {
-				$response->header( self::TOOLS_VERSION_HEADER, $this->server->tools_version() );
+				$response->header( self::TOOLS_VERSION_HEADER, $this->server->tools_version( (bool) call_user_func( $this->paired_write ) ) );
 			}
 		}
 		return $response;

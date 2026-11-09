@@ -1,6 +1,6 @@
 <?php
 /**
- * Every tool FlitAgent serves.
+ * Every tool FlitAgent can serve.
  *
  * @package FlitAgent
  */
@@ -20,6 +20,19 @@ final class Registry {
 	 */
 	const PROVIDERS = array(
 		Providers\CoreReads::class,
+		Providers\BuilderReads::class,
+		Providers\WooReads::class,
+		\FlitAgent\Writes\Content\Provider::class,
+		\FlitAgent\Writes\TermsComments\Provider::class,
+		\FlitAgent\Writes\Media\Provider::class,
+		\FlitAgent\Writes\Users\Provider::class,
+		\FlitAgent\Writes\Ops\Provider::class,
+		\FlitAgent\Writes\Packages\Plugins\Provider::class,
+		\FlitAgent\Writes\Packages\Themes\Provider::class,
+		\FlitAgent\Writes\Packages\Core\Provider::class,
+		\FlitAgent\Writes\Builders\Provider::class,
+		\FlitAgent\Writes\Config\Provider::class,
+		\FlitAgent\Writes\Abilities\Provider::class,
 	);
 
 	/**
@@ -46,6 +59,19 @@ final class Registry {
 			foreach ( $provider->reads() as $tool ) {
 				$tools[] = new PlainOutput( $tool );
 			}
+		}
+		return $tools;
+	}
+
+	/**
+	 * Write tools of every provider.
+	 *
+	 * @return \FlitAgent\Writes\WriteTool[]
+	 */
+	public static function writes(): array {
+		$tools = array();
+		foreach ( self::providers() as $provider ) {
+			$tools = array_merge( $tools, $provider->writes() );
 		}
 		return $tools;
 	}

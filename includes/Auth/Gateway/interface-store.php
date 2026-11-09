@@ -28,6 +28,33 @@ interface Store {
 	public function save_connection( Connection $connection ): void;
 
 	/**
+	 * Stores the connection only when none is stored, in one atomic step: of two concurrent calls at most one returns
+	 * true, and an existing connection is never replaced (Pairing stores with it, so a pairing that lost its lock cannot
+	 * overwrite the connection of the pairing that took it over). Like save_connection(), a connection added clears
+	 * ended().
+	 *
+	 * @param Connection $connection Connection.
+	 * @return bool Whether this call stored it.
+	 */
+	public function add_connection( Connection $connection ): bool;
+
+	/**
+	 * The stored connection read from its row, never a copy cached earlier in this request (another request may have
+	 * deleted or replaced it since), or null.
+	 */
+	public function stored_connection(): ?Connection;
+
+	/**
+	 * Deletes the stored connection only while it is exactly this one, in one atomic step, and leaves everything else
+	 * (the last request, the apps, the revocations, the end time) as it is. Pairing takes back a connection it added
+	 * after losing the pairing lock.
+	 *
+	 * @param Connection $connection Connection.
+	 * @return bool Whether this call deleted it.
+	 */
+	public function remove_connection( Connection $connection ): bool;
+
+	/**
 	 * Deletes the connection and forgets the last request time and the AI apps seen. The disconnected tools stay: their
 	 * grants on flitagent.com survive a local disconnect, so connecting again must not let them back in.
 	 */
@@ -102,6 +129,32 @@ interface Store {
 	 * Releases the key refresh lock this store took, unless another request has taken it over since.
 	 */
 	public function unlock_key_refresh(): void;
+
+	/**
+	 * Takes the pairing lock, so only one request at a time starts, completes or cancels a pairing (Pairing), unless a
+	 * holder stalls past the lock's expiry. Unlike the key refresh lock it is a mutex: of two concurrent calls, at most
+	 * one returns true. A lock past its expiry (its holder stalled or died), or one expiring implausibly far ahead (it
+	 * was written under a clock that ran fast), is stale and taken over, atomically too. Each lock carries its own
+	 * random token, so its holder can tell whether it still holds it (holds_pairing_lock()). Holding it is a lease, not
+	 * a fence: a holder that checked it and then stalls past its expiry can still write after another request took it
+	 * over, so Pairing guards its writes on their own (add_connection() with a re-check after it, and a re-check after
+	 * turning writes on).
+	 *
+	 * @param int $now Current Unix time.
+	 * @return bool False when another request holds the lock.
+	 */
+	public function lock_pairing( int $now ): bool;
+
+	/**
+	 * Whether this store still holds the pairing lock it took: the stored lock (never a cached copy) is still the one it
+	 * took, and has not expired, so no other request can have taken it over.
+	 */
+	public function holds_pairing_lock(): bool;
+
+	/**
+	 * Releases the pairing lock this store took, unless another request has taken it over since.
+	 */
+	public function unlock_pairing(): void;
 
 	/**
 	 * Unix time flitagent.com ended this site's connection (an account or its owner disconnected the site there, and

@@ -17,7 +17,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * GET /wp-json/flitagent/v1/admin/tools: whether the site is connected to flitagent.com and, for each AI tool, whether
  * it is connected (Apps::tools(), which leaves out the tools disconnected on this site). The Connect screen and setup
- * step 3 poll it (assets/js/tool-status.js) so a tool allowed or revoked on flitagent.com shows without a reload.
+ * step 3 poll it (src/admin/tool-status.ts) so a tool allowed or revoked on flitagent.com shows without a reload.
  * For administrators only (Admin::CAPABILITY), from their wp-admin session: WordPress's cookie authentication with the
  * `wp_rest` nonce. It reads the stored state only and sends nothing to flitagent.com.
  */

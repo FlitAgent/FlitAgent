@@ -12,13 +12,15 @@ use FlitAgent\Admin\Onboarding;
 use FlitAgent\Admin\Request;
 use FlitAgent\Auth\Context;
 use FlitAgent\Plugin;
+use FlitAgent\Writes\Wp\WpPolicy;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * "Connect to flitagent.com" (form on the Connect screen, which is read-only in this version, and in the
- * setup guide's Connect step), the pairing
- * return, "Disconnect site", and an AI tool's "Disconnect" and "Set up" (#188), for users passing the access gate.
+ * "Connect to flitagent.com" (form on the Connect screen and in the setup guide's Connect step, both offering `write` as
+ * the ceiling), the pairing return (which sets Access for AI tools to what was chosen on flitagent.com's Approve page,
+ * when a choice came back), "Disconnect site", and an AI tool's "Disconnect" and "Set up" (#188), for users passing the
+ * access gate.
  * Connect and the Disconnect and Set up forms are POSTed with a nonce. The return is a GET from the gateway that carries
  * a nonce of its own, plus a single-use pairing nonce bound to the user who started it.
  * Every handler needs a wp-admin session (not an application password) and the access gate.
@@ -135,8 +137,7 @@ final class AdminSection {
 	private function start( array $post ): string {
 		$this->guard( $post, self::CONNECT );
 		$scope = isset( $post['scope'] ) && is_string( $post['scope'] ) ? $post['scope'] : '';
-		// The beta offers read access only, whatever a crafted POST says.
-		if ( Context::SCOPE_READ !== $scope ) {
+		if ( ! in_array( $scope, array( Context::SCOPE_READ, Context::SCOPE_WRITE ), true ) ) {
 			wp_die( esc_html__( 'Unknown access level.', 'flitagent' ), '', array( 'response' => 400 ) );
 		}
 		if ( null !== $this->store->connection() ) {
@@ -156,7 +157,9 @@ final class AdminSection {
 			$return = admin_url( 'admin-post.php?action=' . self::RETURN ) . ( self::in_new_tab( $post ) ? '&' . self::NEW_TAB . '=1' : '' ) . '&_wpnonce=' . wp_create_nonce( self::RETURN );
 			return ( new Pairing( $this->store ) )->start( get_current_user_id(), $scope, $this->gateway, rest_url( 'flitagent/v1/mcp' ), $return, (int) call_user_func( $this->clock ) );
 		} catch ( \RuntimeException $e ) {
-			self::notify( __( 'Could not start connecting to flitagent.com:', 'flitagent' ) . ' ' . $e->getMessage() );
+			// Pairing's messages are plain English; the one an administrator meets in normal use is translated here.
+			$message = Pairing::LOCKED === $e->getMessage() ? __( 'Another connection attempt is finishing. Try again in a moment.', 'flitagent' ) : $e->getMessage();
+			self::notify( __( 'Could not start connecting to flitagent.com:', 'flitagent' ) . ' ' . $message );
 		} catch ( \InvalidArgumentException $e ) {
 			self::notify( __( 'Could not start connecting to flitagent.com:', 'flitagent' ) . ' ' . $e->getMessage() );
 		}
@@ -197,7 +200,7 @@ final class AdminSection {
 			// Only the pending pairing's own nonce acts on a refusal; anything else is ignored without a word.
 			$code  = is_string( $get['flitagent_pairing_error'] ) ? $get['flitagent_pairing_error'] : '';
 			$nonce = isset( $get['nonce'] ) && is_string( $get['nonce'] ) ? $get['nonce'] : '';
-			if ( $pairing->cancel( $nonce ) ) {
+			if ( $pairing->cancel( $nonce, (int) call_user_func( $this->clock ) ) ) {
 				self::notify( self::error_message( $code ) );
 			}
 			return self::connect_url();
@@ -206,13 +209,17 @@ final class AdminSection {
 		$result    = isset( $get['flitagent_pairing'] ) && is_string( $get['flitagent_pairing'] ) ? $get['flitagent_pairing'] : '';
 		$signature = isset( $get['flitagent_signature'] ) && is_string( $get['flitagent_signature'] ) ? $get['flitagent_signature'] : '';
 
-		$connection = '' === $result || '' === $signature ? null : $pairing->complete( $result, $signature, get_current_user_id(), rest_url( 'flitagent/v1/mcp' ), (int) call_user_func( $this->clock ) );
+		$connection = '' === $result || '' === $signature ? null : $pairing->complete( $result, $signature, get_current_user_id(), rest_url( 'flitagent/v1/mcp' ), (int) call_user_func( $this->clock ), array( self::class, 'apply_access' ) );
 		if ( null === $connection ) {
-			self::notify( __( 'The answer from flitagent.com was refused and nothing was stored. Start connecting again.', 'flitagent' ) );
+			self::notify( __( 'The answer from flitagent.com was refused and no connection was stored. Start connecting again.', 'flitagent' ) );
 			return self::connect_url();
 		}
 		$this->keys->sync_schedule();
-		self::notify( __( 'Connected to flitagent.com.', 'flitagent' ) );
+		self::notify(
+			$pairing->access_failed()
+				? __( 'Connected to flitagent.com. Access for AI tools could not be changed to Read and propose changes; set it in FlitAgent → Settings.', 'flitagent' )
+				: __( 'Connected to flitagent.com.', 'flitagent' )
+		);
 		if ( self::in_new_tab( $get ) ) {
 			// The tab hands back and closes; flitagent.com confirms the site on its first verified request instead of the
 			// check page, and the Connect screen links the check page until an AI tool's first request.
@@ -220,6 +227,41 @@ final class AdminSection {
 		}
 		add_filter( 'allowed_redirect_hosts', array( $this, 'allow_gateway_host' ) );
 		return Config::check_url( $this->gateway, $connection->id() );
+	}
+
+	/**
+	 * Applies the Access chosen on flitagent.com's Approve page as the site's Access for AI tools, stored the way
+	 * Settings and the setup guide store it, and still editable there. Pairing::complete() calls it after every check
+	 * passes, right after checking it still holds the pairing lock: Read only before it stores the connection, Read and
+	 * propose changes after (and Read only again if, once that is applied, the lock or the connection is no longer its
+	 * own). It is not called without a choice (an older flitagent.com, a read grant), which leaves the setting
+	 * as it is.
+	 *
+	 * Fails closed: a Read only choice that does not read back as off refuses the pairing (update_option() returns false
+	 * for an unchanged value too, so its answer proves nothing). The read-back uses the same default as WpPolicy, so a
+	 * site that never saved the setting reads as Read and propose changes, the way every write tool sees it. The cached
+	 * copies are dropped before the write and before the read-back, so a stale cached "off" can neither skip the write
+	 * nor pass the check. A Read and propose changes choice that fails to store leaves the setting as it was, which the
+	 * administrator chose or the default.
+	 *
+	 * @param string $access `read` or `write`.
+	 * @return bool Whether the setting now matches the choice.
+	 */
+	public static function apply_access( string $access ): bool {
+		$write = Context::SCOPE_WRITE === $access;
+		self::forget_cached_access();
+		update_option( WpPolicy::OPTION_ENABLED, $write ? '1' : '0', true );
+		self::forget_cached_access();
+		return WpPolicy::is_on( get_option( WpPolicy::OPTION_ENABLED, WpPolicy::DEFAULT_ENABLED ) ) === $write;
+	}
+
+	/**
+	 * Drops the object cache's copies of Access for AI tools, so the next read and write act on the database.
+	 */
+	private static function forget_cached_access(): void {
+		wp_cache_delete( WpPolicy::OPTION_ENABLED, 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
 	}
 
 	/**

@@ -40,17 +40,17 @@ final class Updates {
 
 		$updates = array();
 		foreach ( $snapshot['plugins'] as $plugin ) {
-			$blocked   = 0 === strpos( $plugin['file'], 'flitagent/' ) ? 'FlitAgent does not update itself: update it in wp-admin (Plugins).' : self::requirements( $plugin['name'], $plugin['requires'], $plugin['requires_php'], $wp, $php );
-			$updates[] = self::item( 'plugin', $plugin['file'], $plugin['name'], $plugin['version'], $plugin['new_version'], (bool) $plugin['active'], $plugin['requires'], $plugin['requires_php'], (string) $plugin['tested'], $wp, $blocked );
+			$blocked   = self::tool_refusal( $plugin['file'], $plugin['name'] ) ?? self::requirements( $plugin['name'], $plugin['requires'], $plugin['requires_php'], $wp, $php );
+			$updates[] = self::item( 'plugin', $plugin['file'], $plugin['name'], $plugin['version'], $plugin['new_version'], (bool) $plugin['active'], $plugin['requires'], $plugin['requires_php'], (string) $plugin['tested'], $wp, $blocked, 'update_plugin', array( 'plugin' => $plugin['file'] ) );
 		}
 		foreach ( $snapshot['themes'] as $theme ) {
 			$blocked   = self::requirements( $theme['name'], $theme['requires'], $theme['requires_php'], $wp, $php );
-			$updates[] = self::item( 'theme', $theme['stylesheet'], $theme['name'], $theme['version'], $theme['new_version'], (bool) $theme['active'], $theme['requires'], $theme['requires_php'], '', $wp, $blocked );
+			$updates[] = self::item( 'theme', $theme['stylesheet'], $theme['name'], $theme['version'], $theme['new_version'], (bool) $theme['active'], $theme['requires'], $theme['requires_php'], '', $wp, $blocked, 'update_theme', array( 'slug' => $theme['stylesheet'] ) );
 		}
 		if ( null !== $snapshot['core'] ) {
 			$core      = $snapshot['core'];
 			$blocked   = self::requirements( 'WordPress ' . $core['version'], '', (string) $core['php_version'], $wp, $php );
-			$updates[] = self::item( 'core', self::CORE_ID, 'WordPress', $wp, $core['version'], true, '', (string) $core['php_version'], '', $wp, $blocked );
+			$updates[] = self::item( 'core', self::CORE_ID, 'WordPress', $wp, $core['version'], true, '', (string) $core['php_version'], '', $wp, $blocked, 'update_core', array( 'version' => $core['version'] ) );
 		}
 
 		usort(
@@ -85,20 +85,22 @@ final class Updates {
 	/**
 	 * One update.
 	 *
-	 * @param string      $type         plugin, theme or core.
-	 * @param string      $id           Plugin file, theme stylesheet, or CORE_ID.
-	 * @param string      $name         Name.
-	 * @param string      $from         Installed version.
-	 * @param string      $to           New version.
-	 * @param bool        $active       Whether the site uses it.
-	 * @param string      $requires     Required WordPress version, or ''.
-	 * @param string      $requires_php Required PHP version, or ''.
-	 * @param string      $tested       Tested up to, or ''.
-	 * @param string      $wp           Installed WordPress version.
-	 * @param string|null $blocked      Why it cannot be applied, or null.
+	 * @param string               $type         plugin, theme or core.
+	 * @param string               $id           Plugin file, theme stylesheet, or CORE_ID.
+	 * @param string               $name         Name.
+	 * @param string               $from         Installed version.
+	 * @param string               $to           New version.
+	 * @param bool                 $active       Whether the site uses it.
+	 * @param string               $requires     Required WordPress version, or ''.
+	 * @param string               $requires_php Required PHP version, or ''.
+	 * @param string               $tested       Tested up to, or ''.
+	 * @param string               $wp           Installed WordPress version.
+	 * @param string|null          $blocked      Why it cannot be applied, or null.
+	 * @param string               $tool         Fixing tool.
+	 * @param array<string, mixed> $arguments    Its arguments.
 	 * @return array<string, mixed>
 	 */
-	private static function item( string $type, string $id, string $name, string $from, string $to, bool $active, string $requires, string $requires_php, string $tested, string $wp, ?string $blocked ): array {
+	private static function item( string $type, string $id, string $name, string $from, string $to, bool $active, string $requires, string $requires_php, string $tested, string $wp, ?string $blocked, string $tool, array $arguments ): array {
 		return array(
 			'type'         => $type,
 			'id'           => $id,
@@ -113,7 +115,28 @@ final class Updates {
 			'untested'     => '' !== $tested && version_compare( self::branch( $tested ), self::branch( $wp ), '<' ),
 			'status'       => null === $blocked ? 'ready' : 'blocked',
 			'reason'       => $blocked,
+			'fix'          => null === $blocked ? array(
+				'tool'      => $tool,
+				'arguments' => $arguments,
+			) : null,
 		);
+	}
+
+	/**
+	 * Why update_plugin would refuse this plugin whatever the site's versions, or null.
+	 *
+	 * @param string $file Plugin file.
+	 * @param string $name Name.
+	 * @return string|null
+	 */
+	private static function tool_refusal( string $file, string $name ): ?string {
+		if ( 0 === strpos( $file, 'flitagent/' ) ) {
+			return 'FlitAgent does not update itself: update it in wp-admin (Plugins).';
+		}
+		if ( false === strpos( $file, '/' ) ) {
+			return SiteText::message( '%s is a single file in the plugins folder, so FlitAgent cannot update it: update it in wp-admin (Plugins).', $name );
+		}
+		return null;
 	}
 
 	/**
@@ -180,7 +203,7 @@ final class Updates {
 		$last   = $backup['last_backup'];
 		if ( null === $plugin ) {
 			$status  = 'none';
-			$warning = 'No known backup plugin is active. Back up the site before updating; FlitAgent does not perform updates and cannot undo one.';
+			$warning = 'No known backup plugin is active. Back up the site before updating; FlitAgent cannot undo a WordPress update or database changes an update makes.';
 		} elseif ( null === $last ) {
 			$status  = 'unknown';
 			$warning = SiteText::message( 'FlitAgent cannot read when %s last backed up. Check that a backup from the last 24 hours exists before updating.', $plugin );

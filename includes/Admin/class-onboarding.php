@@ -33,18 +33,15 @@ final class Onboarding {
 	private static bool $activated_now = false;
 
 	/**
-	 * Steps, in order (#209: Connect covers connecting the site and setting up the AI tools; the beta has no step for changes).
+	 * Steps, in order (#209: Connect covers connecting the site and setting up the AI tools).
 	 */
-	const STEPS = array( 'welcome', 'check', 'connect', 'done' );
+	const STEPS = array( 'welcome', 'check', 'connect', 'changes', 'done' );
 
 	/**
 	 * Steps that no longer exist, and the step that took their place, so an old link still lands on it while its nonce is
 	 * valid. Without a valid nonce the guide opens on Welcome.
 	 */
-	const RENAMED = array(
-		'app'     => 'connect',
-		'changes' => 'done',
-	);
+	const RENAMED = array( 'app' => 'connect' );
 
 	/**
 	 * Nonce action and admin-post action of the setup guide's forms.

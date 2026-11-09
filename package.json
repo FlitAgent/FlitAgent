@@ -1,0 +1,23 @@
+{
+	"name": "flitagent",
+	"version": "1.0.0",
+	"description": "Admin scripts and styles of the FlitAgent WordPress plugin.",
+	"private": true,
+	"license": "GPL-2.0-or-later",
+	"packageManager": "pnpm@10.6.2",
+	"engines": {
+		"node": ">=20.19.0"
+	},
+	"devDependencies": {
+		"@wordpress/dom-ready": "wp-6.7",
+		"@wordpress/scripts": "wp-6.7",
+		"copy-webpack-plugin": "10.2.4",
+		"ts-loader": "^9.5.1",
+		"typescript": "^5.6.3"
+	},
+	"scripts": {
+		"build": "wp-scripts build --no-cache",
+		"dev": "wp-scripts start --no-cache",
+		"start": "pnpm run dev"
+	}
+}

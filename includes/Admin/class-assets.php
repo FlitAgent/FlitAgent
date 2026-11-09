@@ -1,6 +1,6 @@
 <?php
 /**
- * Scripts and styles.
+ * Compiled scripts and styles.
  *
  * @package FlitAgent
  */
@@ -10,37 +10,37 @@ namespace FlitAgent\Admin;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Locates the admin's plain scripts and styles in assets/, which ship as they are (no build step): assets/css/tokens.css
- * and admin.css, assets/js/ with one classic script per class plus admin.js, which attaches them.
+ * Locates the files @wordpress/scripts compiles from src/ into build/ (`pnpm build`), with the dependencies and
+ * content-hash version it writes to build/<entry>.asset.php.
  */
 final class Assets {
 
 	/**
-	 * Folder of the scripts and styles, relative to the plugin.
+	 * Folder of the compiled files, relative to the plugin.
 	 */
-	const DIR = 'assets';
+	const DIR = 'build';
 
 	/**
-	 * Style handle of the design tokens (css/tokens.css), which admin.css depends on.
-	 */
-	const TOKENS = 'flitagent-tokens';
-
-	/**
-	 * Script handle => file under assets/, in load order. Each puts its class on window.flitagentAdmin; admin.js
-	 * (the Admin::STYLE handle) depends on all of them and attaches them.
-	 */
-	const SCRIPTS = array(
-		'flitagent-dialog'      => 'js/dialog.js',
-		'flitagent-copy-button' => 'js/copy-button.js',
-		'flitagent-connect-tab' => 'js/connect-tab.js',
-		'flitagent-run-check'   => 'js/run-check.js',
-		'flitagent-tool-status' => 'js/tool-status.js',
-	);
-
-	/**
-	 * URL of a file in assets/.
+	 * Dependencies and version of an entry. Without a build, no dependencies and the plugin version.
 	 *
-	 * @param string $file Path under assets/, such as css/admin.css.
+	 * @param string      $entry Entry name (admin).
+	 * @param string|null $dir   Build folder; the plugin's by default.
+	 * @return array{dependencies: string[], version: string}
+	 */
+	public static function meta( string $entry, ?string $dir = null ): array {
+		$file = ( null === $dir ? dirname( FLITAGENT_FILE ) . '/' . self::DIR : $dir ) . '/' . $entry . '.asset.php';
+		$data = is_file( $file ) ? include $file : null;
+
+		return array(
+			'dependencies' => is_array( $data ) && isset( $data['dependencies'] ) && is_array( $data['dependencies'] ) ? array_values( $data['dependencies'] ) : array(),
+			'version'      => is_array( $data ) && isset( $data['version'] ) && is_string( $data['version'] ) ? $data['version'] : FLITAGENT_VERSION,
+		);
+	}
+
+	/**
+	 * URL of a compiled file.
+	 *
+	 * @param string $file File name, such as admin.css.
 	 * @return string
 	 */
 	public static function url( string $file ): string {

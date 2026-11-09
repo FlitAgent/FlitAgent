@@ -16,7 +16,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * Throw sites escape the values in a message, as WordPress requires of exception messages, with esc_textarea(): unlike
  * esc_html() it also encodes entities already in the value (post content with `&amp;`), so plain() gets the exact text
- * back for JSON. wp-admin prints the escaped message with esc_html(), which leaves those entities alone.
+ * back for JSON and receipts. wp-admin prints the escaped message with esc_html(), which leaves those entities alone.
  * A message reused inside another message is read with plain() before it is escaped again.
  */
 final class ToolError extends \RuntimeException {

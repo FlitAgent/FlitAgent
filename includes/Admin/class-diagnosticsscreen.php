@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Renders the Connection section and, on a valid submission (access gate and nonce), runs Diagnostics against the
  * site itself and shows the results. The form posts back to the Settings page, so results are rendered in that response
- * and never stored. Every dynamic value is escaped here, so callers may echo the result.
+ * and never stored. Every dynamic value is escaped here; Admin prints the result through wp_kses() with Ui::allowed_html().
  */
 final class DiagnosticsScreen {
 

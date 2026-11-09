@@ -22,9 +22,10 @@ final class Definition {
 	 * @param string               $description Description (starts "From the FlitAgent WordPress plugin: ").
 	 * @param array<string, mixed> $properties  Input properties.
 	 * @param string[]             $required    Required input names.
+	 * @param bool                 $open_world  Whether the tool reaches services outside this site.
 	 * @return array<string, mixed>
 	 */
-	public static function read_only( string $name, string $title, string $description, array $properties = array(), array $required = array() ): array {
+	public static function read_only( string $name, string $title, string $description, array $properties = array(), array $required = array(), bool $open_world = false ): array {
 		$input = array(
 			'type'                 => 'object',
 			'properties'           => array() === $properties ? new \stdClass() : $properties,
@@ -34,7 +35,12 @@ final class Definition {
 			$input['required'] = $required;
 		}
 
-		$annotations = Annotations::read_only( $title );
+		$annotations                  = Annotations::read_only( $title );
+		$annotations['openWorldHint'] = $open_world;
+		if ( $open_world ) {
+			// Results depend on an outside service, so repeating a call may differ.
+			$annotations['idempotentHint'] = false;
+		}
 
 		return array(
 			'name'        => $name,

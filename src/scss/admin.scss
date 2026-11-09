@@ -1,0 +1,73 @@
+// FlitAgent wp-admin screens, loaded only on FlitAgent's own screens (Admin::enqueue); fonts.css comes in
+// through the entry (src/admin/index.ts). One look with flitagent.com: light only, the tokens of @flit/design
+// declared on the wrapper only, never on the document root. Everything sits inside .flitagent-wrap; WordPress chrome
+// (admin menu, admin bar, screen options, help tabs, notices other code prints) keeps core's look.
+@use "sass:map";
+@use "../flit-design/tokens" as flit;
+@use "components";
+@use "core";
+@use "screens";
+@use "manage";
+@use "connect";
+@use "onboarding";
+
+// This sheet loads on FlitAgent's screens only, so the page behind the wrapper takes the wrapper's background and the
+// screen reads as one surface from the admin menu to the footer. The colour is the token's value
+// at build time: the custom properties stay on the wrapper.
+#wpwrap {
+	background: map.get(flit.$color-light, "bg");
+}
+
+.flitagent-wrap {
+	@include flit.light-vars;
+
+	box-sizing: border-box;
+	max-width: var(--flit-size-content-max);
+	// The boards' frame: with #wpcontent's 20px gutter the header starts 48px from the admin
+	// menu and 28px below the bar on every screen; raw px are the boards' where no token has them.
+	margin: 0 var(--flit-space-5) 0 0;
+	padding: 28px 28px 40px;
+	border-radius: var(--flit-radius-xl);
+	background: var(--flit-color-bg);
+	color: var(--flit-color-fg);
+	font-family: var(--flit-font-sans);
+	font-size: var(--flit-font-size-base);
+	line-height: var(--flit-line-height-base);
+
+	*,
+	*::before,
+	*::after {
+		box-sizing: border-box;
+	}
+
+	// A5: a 2px focus outline with 2px offset, inside the wrapper only. Core gives buttons, inputs and links a
+	// transparent outline and a box-shadow ring on :focus; these selectors outrank them.
+	:focus-visible,
+	a:focus-visible,
+	.button:focus-visible,
+	.button-link:focus-visible,
+	input:focus-visible,
+	select:focus-visible,
+	textarea:focus-visible,
+	summary:focus-visible {
+		outline: var(--flit-border-width-focus) solid var(--flit-color-focus);
+		outline-offset: 2px;
+		box-shadow: none;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		@include flit.reduced-motion-vars;
+
+		*,
+		*::before,
+		*::after {
+			animation-duration: 0ms !important;
+			transition-duration: 0ms !important;
+		}
+	}
+
+	@media screen and (max-width: 600px) {
+		margin-right: var(--flit-space-2);
+		padding: var(--flit-space-4);
+	}
+}

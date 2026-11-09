@@ -1,0 +1,174 @@
+// The setup guide's frame, shared by every step and following the design's Setup boards: the step card, "Step N
+// of 5", the step heading, body text and the action row (the page frame and header are every screen's). A step's own
+// content keeps its rules in _screens.scss. Raw px values are the boards' where no token has them.
+@use "sass:map";
+
+.flitagent-wrap {
+
+	// The step card's content width on each step's board (the card adds its padding and border). The card carries
+	// .flitagent-onboarding-card--<step>.
+	$onboarding-widths: (
+		"welcome": 720px,
+		"check": 820px,
+		"connect": 820px,
+		"changes": 760px,
+		"done": 720px,
+	);
+
+	&.flitagent-onboarding {
+		// The frame and the page header are every screen's (admin.scss, _components.scss).
+
+		// A notice (the outcome of connecting, a Disconnect or a Set up) sits above the step card, as on every other
+		// screen, never inside it, and no wider than the card.
+		> .flitagent-notice {
+			max-width: calc(#{map.get($onboarding-widths, "connect")} + 64px + 2 * var(--flit-border-width-hairline));
+		}
+
+		// The step card: paper, hairline, 12px radius, the card shadow; its children 14px apart, with no margins of their
+		// own. A step's form only groups fields, so its parts sit in the same column.
+		.flitagent-onboarding-card {
+			display: flex;
+			flex-direction: column;
+			gap: 14px;
+			box-sizing: content-box;
+			margin: 0;
+			padding: 28px 32px;
+			border-radius: var(--flit-radius-lg);
+			line-height: 1.55;
+
+			@each $step, $width in $onboarding-widths {
+
+				&.flitagent-onboarding-card--#{$step} {
+					max-width: $width;
+				}
+			}
+
+			> form {
+				display: contents;
+			}
+
+			> *,
+			> form > * {
+				margin: 0;
+			}
+
+			p,
+			li {
+				line-height: inherit;
+			}
+
+			@media screen and (max-width: 600px) {
+				padding: var(--flit-space-4);
+			}
+		}
+
+		.flitagent-onboarding-step {
+			color: var(--flit-color-fg-subtle);
+			font-size: var(--flit-font-size-xs);
+			font-weight: var(--flit-font-weight-medium);
+		}
+
+		.flitagent-onboarding-card > h2 {
+			font-size: 22px;
+			line-height: inherit;
+			letter-spacing: -0.01em;
+		}
+
+		.flitagent-onboarding-card > ul {
+			display: flex;
+			flex-direction: column;
+			gap: 6px;
+			padding-left: var(--flit-space-5);
+
+			li {
+				margin: 0;
+			}
+		}
+
+		// The action row: Back, then the step's buttons, all at the right end; 40px pills, 8px apart.
+		.flitagent-onboarding-actions {
+			justify-content: flex-end;
+			gap: var(--flit-space-2);
+			padding-top: var(--flit-space-2);
+
+			.button {
+				min-height: 40px;
+				padding: 0 22px;
+			}
+		}
+
+		.flitagent-onboarding-card--check .flitagent-onboarding-actions {
+			padding-top: var(--flit-space-1);
+		}
+
+		.flitagent-onboarding-actions--rule {
+			border-top: var(--flit-border-width-hairline) solid var(--flit-color-border);
+		}
+
+		// The check step's verdict: a 4px bar in the role's text colour, no glyph.
+		.flitagent-onboarding-verdict {
+			padding: var(--flit-space-3) 14px;
+			border-left-color: var(--flit-color-info-fg);
+			border-radius: var(--flit-radius-sm);
+
+			&::before {
+				display: none;
+			}
+
+			@each $class, $role in (success, success), (warning, warning), (error, danger) {
+
+				&.notice-#{$class} {
+					border-left-color: var(--flit-color-#{$role}-fg);
+				}
+			}
+		}
+
+		// The check step's results: hairline rows, no frame, the header in muted text.
+		.flitagent-check-table {
+			width: 100%;
+			border-collapse: collapse;
+			font-size: var(--flit-font-size-sm);
+
+			th,
+			td {
+				padding: 10px;
+				border-bottom: var(--flit-border-width-hairline) solid var(--flit-color-border);
+				text-align: left;
+			}
+
+			th {
+				padding: var(--flit-space-2) 10px;
+				color: var(--flit-color-fg-muted);
+				font-weight: var(--flit-font-weight-medium);
+			}
+
+			td:last-child {
+				color: var(--flit-color-fg-muted);
+			}
+
+			// The board's 150px and 100px columns, plus their padding.
+			.column-check {
+				width: 170px;
+			}
+
+			.column-result {
+				width: 120px;
+			}
+
+			.flitagent-chip {
+				padding: 2px 10px;
+				font-size: inherit;
+				line-height: inherit;
+			}
+
+			.flitagent-chip-icon {
+				stroke-width: 2.4;
+			}
+		}
+
+		.flitagent-onboarding-note {
+			color: var(--flit-color-fg-subtle);
+			font-size: var(--flit-font-size-xs);
+		}
+	}
+}

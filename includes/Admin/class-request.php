@@ -51,6 +51,25 @@ final class Request {
 	}
 
 	/**
+	 * A named list field from $_POST (several checkboxes of one name), only when the request carries a valid nonce for the
+	 * action. Anything in the list that is not a string is left out; a field that is missing or is not a list reads as empty.
+	 *
+	 * @param string $name   Field name.
+	 * @param string $action Nonce action.
+	 * @return array<int, string> Sanitized values.
+	 */
+	public static function post_list( string $name, string $action ): array {
+		if ( ! isset( $_POST['_wpnonce'] ) || ! is_string( $_POST['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ), $action ) ) {
+			return array();
+		}
+		if ( ! isset( $_POST[ $name ] ) || ! is_array( $_POST[ $name ] ) ) {
+			return array();
+		}
+		// Sanitizing turns anything but a string into '', which is left out with the empty values.
+		return array_values( array_filter( array_map( 'sanitize_text_field', wp_unslash( $_POST[ $name ] ) ), 'strlen' ) );
+	}
+
+	/**
 	 * Whether this is a POST request.
 	 *
 	 * @return bool

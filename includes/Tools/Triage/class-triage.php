@@ -8,12 +8,13 @@
 namespace FlitAgent\Tools\Triage;
 
 use FlitAgent\Tools\SiteText;
+use FlitAgent\Writes\Summary;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Turns a snapshot of the site (see SiteSnapshot) into findings: what is wrong, how serious it is, and what to do about
- * it in wp-admin. Pure: no WordPress calls, so every rule is testable on plain arrays.
+ * Turns a snapshot of the site (see SiteSnapshot) into findings: what is wrong, how serious it is, and which FlitAgent
+ * tool fixes it. Pure: no WordPress calls, so every rule is testable on plain arrays.
  */
 final class Triage {
 
@@ -34,6 +35,11 @@ final class Triage {
 	const MAINTENANCE_GRACE = 600;
 
 	/**
+	 * Cron hooks run_cron_event refuses: automatic updates.
+	 */
+	const REFUSED_CRON_HOOKS = array( 'wp_maybe_auto_update' );
+
+	/**
 	 * Findings for a snapshot.
 	 *
 	 * @param array<string, mixed> $snapshot Snapshot from SiteSnapshot::read().
@@ -49,7 +55,8 @@ final class Triage {
 			self::cron( $snapshot['cron'], (bool) $snapshot['disable_wp_cron'], (int) $snapshot['now'] ),
 			self::site_health( $snapshot['site_health'] ),
 			self::inactive_plugins( $snapshot['plugins'] ),
-			self::inactive_themes( $snapshot['themes'], (string) $snapshot['default_theme'] )
+			self::inactive_themes( $snapshot['themes'], (string) $snapshot['default_theme'] ),
+			self::woocommerce( $snapshot['woo'] ?? null )
 		);
 
 		// Order by severity, keeping each severity's findings in the order above (usort is not stable before PHP 8).
@@ -86,21 +93,23 @@ final class Triage {
 				continue;
 			}
 			$own    = 0 === strpos( $plugin['file'], 'flitagent/' );
+			$single = false === strpos( $plugin['file'], '/' );
 			$detail = SiteText::message( '%s %s is installed; %s is available.', $plugin['name'], $plugin['version'], $plugin['update'] );
 			if ( $own ) {
 				$detail .= ' FlitAgent does not update itself: update it in wp-admin (Plugins).';
+			} elseif ( $single ) {
+				$detail .= ' It is a single file in the plugins folder, so FlitAgent cannot update it: update it in wp-admin (Plugins).';
 			} elseif ( ! $plugin['active'] ) {
-				$detail .= ' The plugin is inactive, but its code can still be reached. Update or delete it in wp-admin (Plugins).';
-			} else {
-				$detail .= ' Update it in wp-admin (Plugins).';
+				$detail .= ' The plugin is inactive, but its code can still be reached; update or delete it.';
 			}
 			$out[] = self::finding(
 				'plugin_update:' . $plugin['file'],
 				$plugin['active'] ? 'critical' : 'warning',
 				SiteText::message( 'Update available for %s', $plugin['name'] ),
-				$detail
+				$detail,
+				$own || $single ? null : self::fix( 'update_plugin', array( 'plugin' => $plugin['file'] ) )
 			);
-		}
+		}//end foreach
 		return $out;
 	}
 
@@ -121,7 +130,8 @@ final class Triage {
 				'theme_update:' . $theme['stylesheet'],
 				$in_use ? 'critical' : 'warning',
 				SiteText::message( 'Update available for the %s theme', $theme['name'] ),
-				SiteText::message( '%s %s is installed; %s is available.%s', $theme['name'], $theme['version'], $theme['update'], $in_use ? ' The site uses this theme.' : '' ) . ' Update it in wp-admin (Appearance, Themes).'
+				SiteText::message( '%s %s is installed; %s is available.%s', $theme['name'], $theme['version'], $theme['update'], $in_use ? ' The site uses this theme.' : '' ),
+				self::fix( 'update_theme', array( 'slug' => $theme['stylesheet'] ) )
 			);
 		}
 		return $out;
@@ -142,7 +152,8 @@ final class Triage {
 				'core_update',
 				'warning',
 				'WordPress update available',
-				SiteText::message( 'WordPress %s is available. Back up the site, then update it in wp-admin (Dashboard, Updates).', $version )
+				SiteText::message( 'WordPress %s is available. Back up the site before updating; a core update cannot be rolled back.', $version ),
+				self::fix( 'update_core', array( 'version' => $version ) )
 			),
 		);
 	}
@@ -163,7 +174,8 @@ final class Triage {
 				'maintenance_stuck',
 				'critical',
 				'Maintenance mode is stuck',
-				sprintf( 'The .maintenance file in the WordPress folder is %d minutes old, so an update probably failed part-way. Check that plugins, themes and WordPress are complete, then delete the .maintenance file (by FTP or your host\'s file manager).', (int) floor( ( $now - $since ) / 60 ) )
+				sprintf( 'The .maintenance file in the WordPress folder is %d minutes old, so an update probably failed part-way. Check that plugins, themes and WordPress are complete, then delete the .maintenance file (by FTP or your host\'s file manager).', (int) floor( ( $now - $since ) / 60 ) ),
+				null
 			),
 		);
 	}
@@ -184,7 +196,8 @@ final class Triage {
 				'debug_display',
 				'warning',
 				'PHP errors are shown to visitors',
-				'WP_DEBUG is on and WP_DEBUG_DISPLAY is not off, so errors and file paths can appear on public pages. In wp-config.php set WP_DEBUG_DISPLAY to false (and WP_DEBUG_LOG to true to keep a log), or turn WP_DEBUG off.'
+				'WP_DEBUG is on and WP_DEBUG_DISPLAY is not off, so errors and file paths can appear on public pages. In wp-config.php set WP_DEBUG_DISPLAY to false (and WP_DEBUG_LOG to true to keep a log), or turn WP_DEBUG off.',
+				null
 			),
 		);
 	}
@@ -212,14 +225,15 @@ final class Triage {
 				'cron_disabled',
 				'warning',
 				'WP-Cron is disabled and tasks are not running',
-				'DISABLE_WP_CRON is set, so WordPress relies on a server cron job, and scheduled tasks are overdue. Ask your host to run wp-cron.php (or `wp cron event run --due-now`) every few minutes.'
+				'DISABLE_WP_CRON is set, so WordPress relies on a server cron job, and scheduled tasks are overdue. Ask your host to run wp-cron.php (or `wp cron event run --due-now`) every few minutes.',
+				null
 			);
 		}
 		return $out;
 	}
 
 	/**
-	 * An overdue cron event.
+	 * An overdue cron event, fixed by run_cron_event unless that tool refuses the hook.
 	 *
 	 * @param string $hook      Hook.
 	 * @param int    $timestamp When it was due.
@@ -227,11 +241,18 @@ final class Triage {
 	 * @return array<string, mixed>
 	 */
 	private static function overdue( string $hook, int $timestamp, int $late ): array {
+		$refused = in_array( $hook, self::REFUSED_CRON_HOOKS, true ) || 0 === strpos( $hook, 'flitagent_' );
+		$fix     = array(
+			'hook'     => $hook,
+			'next_run' => gmdate( 'c', $timestamp ),
+		);
+
 		return self::finding(
 			'cron_overdue:' . $hook . ':' . $timestamp,
 			'warning',
 			SiteText::message( 'Scheduled task %s is overdue', $hook ),
-			sprintf( 'It was due %d hours ago. WordPress runs it on its next cron run; if it keeps coming back, ask your host or a developer to check WP-Cron.', (int) floor( $late / 3600 ) )
+			sprintf( 'It was due %d hours ago.%s', (int) floor( $late / 3600 ), $refused ? ' FlitAgent does not run this task; WordPress runs it on its next cron run.' : '' ),
+			$refused ? null : self::fix( 'run_cron_event', $fix )
 		);
 	}
 
@@ -248,7 +269,8 @@ final class Triage {
 					'site_health_missing',
 					'info',
 					'No Site Health result saved yet',
-					'Open Tools → Site Health in wp-admin once so WordPress runs its own checks; triage then includes their result.'
+					'Open Tools → Site Health in wp-admin once so WordPress runs its own checks; triage then includes their result.',
+					null
 				),
 			);
 		}
@@ -260,7 +282,8 @@ final class Triage {
 				'site_health_critical',
 				'warning',
 				'Site Health reports critical issues',
-				sprintf( 'The last Site Health check found %s. See Tools → Site Health in wp-admin for details.', self::count( (int) $counts['critical'], 'critical issue', 'critical issues' ) )
+				sprintf( 'The last Site Health check found %s. See Tools → Site Health in wp-admin for details.', Summary::count( (int) $counts['critical'], 'critical issue', 'critical issues' ) ),
+				null
 			),
 		);
 	}
@@ -281,7 +304,8 @@ final class Triage {
 				'inactive_plugin:' . $plugin['file'],
 				'info',
 				SiteText::message( '%s is installed but inactive', $plugin['name'] ),
-				'Inactive plugins still have code on the server. Delete it in wp-admin (Plugins) if the site no longer needs it.'
+				'Inactive plugins still have code on the server. Delete it if the site no longer needs it.',
+				self::fix( 'delete_plugin', array( 'plugin' => $plugin['file'] ) )
 			);
 		}
 		return $out;
@@ -304,7 +328,72 @@ final class Triage {
 				'inactive_theme:' . $theme['stylesheet'],
 				'info',
 				SiteText::message( 'The %s theme is installed but unused', $theme['name'] ),
-				'Unused themes still have code on the server. Delete it in wp-admin (Appearance, Themes) if the site no longer needs it; the default theme is kept as a fallback.'
+				'Unused themes still have code on the server. Delete it if the site no longer needs it; the default theme is kept as a fallback.',
+				self::fix( 'delete_theme', array( 'slug' => $theme['stylesheet'] ) )
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * WooCommerce findings: a pending database update, failed and on-hold orders in the last 7 days, outdated template
+	 * overrides and products out of stock.
+	 *
+	 * @param array<string, mixed>|null $woo WooCommerce facts, or null when WooCommerce is not active.
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function woocommerce( ?array $woo ): array {
+		if ( null === $woo ) {
+			return array();
+		}
+		$out = array();
+		if ( $woo['db_update_pending'] ) {
+			$out[] = self::finding(
+				'woo_db_update',
+				'critical',
+				'WooCommerce needs a database update',
+				'WooCommerce was updated but its database was not. Until the update runs, parts of the store can misbehave. Run it from the notice in wp-admin after taking a backup.',
+				null
+			);
+		}
+		if ( $woo['failed_7d'] > 0 ) {
+			$out[] = self::finding(
+				'woo_failed_orders',
+				'warning',
+				sprintf( '%d failed orders in the last 7 days', $woo['failed_7d'] ),
+				'Failed orders usually mean declined payments or a payment gateway problem. Check the orders and the gateway settings.',
+				self::fix( 'list_orders', array( 'status' => 'failed' ) )
+			);
+		}
+		if ( $woo['on_hold_7d'] > 0 ) {
+			$out[] = self::finding(
+				'woo_on_hold_orders',
+				'warning',
+				sprintf( '%d orders on hold from the last 7 days', $woo['on_hold_7d'] ),
+				'On-hold orders wait for someone to confirm payment (for example a bank transfer) before they are processed.',
+				self::fix( 'list_orders', array( 'status' => 'on-hold' ) )
+			);
+		}
+		if ( array() !== $woo['outdated_templates'] ) {
+			$files = array();
+			foreach ( $woo['outdated_templates'] as $template ) {
+				$files[] = SiteText::message( '%s (%s, WooCommerce has %s)', $template['file'], $template['version'], $template['core_version'] );
+			}
+			$out[] = self::finding(
+				'woo_outdated_templates',
+				'warning',
+				sprintf( '%d outdated WooCommerce template overrides in the theme', count( $files ) ),
+				'The theme overrides WooCommerce templates that have changed since; the store can show old markup or break. Ask the theme developer to update: ' . implode( '; ', $files ) . '.',
+				null
+			);
+		}
+		if ( $woo['out_of_stock_total'] > 0 ) {
+			$out[] = self::finding(
+				'woo_out_of_stock',
+				'info',
+				sprintf( '%d products out of stock', $woo['out_of_stock_total'] ),
+				sprintf( '%d published products are out of stock, including: %s.', $woo['out_of_stock_total'], implode( ', ', array_map( array( SiteText::class, 'plain' ), $woo['out_of_stock_names'] ) ) ),
+				self::fix( 'list_products', array( 'stock_status' => 'outofstock' ) )
 			);
 		}
 		return $out;
@@ -313,31 +402,34 @@ final class Triage {
 	/**
 	 * A finding.
 	 *
-	 * @param string $id       Stable id.
-	 * @param string $severity critical, warning or info.
-	 * @param string $title    One line.
-	 * @param string $detail   What and what to do in wp-admin.
+	 * @param string                    $id       Stable id.
+	 * @param string                    $severity critical, warning or info.
+	 * @param string                    $title    One line.
+	 * @param string                    $detail   What and what to do.
+	 * @param array<string, mixed>|null $fix      Tool and arguments, or null for advice only.
 	 * @return array<string, mixed>
 	 */
-	private static function finding( string $id, string $severity, string $title, string $detail ): array {
+	private static function finding( string $id, string $severity, string $title, string $detail, ?array $fix ): array {
 		return array(
 			'id'       => $id,
 			'severity' => $severity,
 			'title'    => $title,
 			'detail'   => $detail,
+			'fix'      => $fix,
 		);
 	}
 
 	/**
-	 * A count with its noun in the singular or the plural: "1 critical issue", "2 critical issues". Findings are English
-	 * by design (the model reads them), so this is not translated.
+	 * A fix: a FlitAgent tool and its arguments (the client adds idempotency_key for write tools).
 	 *
-	 * @param int    $n    Count.
-	 * @param string $one  Singular noun.
-	 * @param string $many Plural noun.
-	 * @return string
+	 * @param string               $tool      Tool name.
+	 * @param array<string, mixed> $arguments Arguments.
+	 * @return array<string, mixed>
 	 */
-	private static function count( int $n, string $one, string $many ): string {
-		return $n . ' ' . ( 1 === $n ? $one : $many );
+	private static function fix( string $tool, array $arguments ): array {
+		return array(
+			'tool'      => $tool,
+			'arguments' => $arguments,
+		);
 	}
 }

@@ -7,18 +7,18 @@
 
 namespace FlitAgent\Auth\Gateway;
 
-use FlitAgent\Auth\Net\Address;
-use FlitAgent\Auth\Net\Refusal;
-use FlitAgent\Auth\Net\Target;
+use FlitAgent\Writes\Media\Address;
+use FlitAgent\Writes\Media\Download;
+use FlitAgent\Writes\Media\Refusal;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
  * Checks a gateway URL's host and makes one request to it that follows no redirects and is pinned to a checked address
- * with cURL's `CURLOPT_RESOLVE`.
+ * with cURL's `CURLOPT_RESOLVE`, as the media downloader does.
  *
- * A public gateway goes through the SSRF rules of `Auth\Net\Target::check()` (every DNS address must be public,
- * ports 80/443/8080) and `wp_safe_remote_get()` / `wp_safe_remote_post()`. Only when the URL
+ * A public gateway goes through the media downloader's SSRF rules (`Writes\Media\Download::target()`: every DNS
+ * address must be public, ports 80/443/8080) and `wp_safe_remote_get()` / `wp_safe_remote_post()`. Only when the URL
  * itself is loopback (development) is the request made to loopback: `localhost` is pinned to 127.0.0.1, then to ::1 if
  * that connection fails, without a DNS lookup, so a loopback allowance can never reach anything but this machine.
  *
@@ -45,7 +45,7 @@ final class Pinned {
 	 *
 	 * @param string $url Gateway URL (already checked by Config::normalize(), with a path).
 	 * @return array{url: string, pins: string[], safe: bool}
-	 * @throws Refusal When the SSRF rules (Auth\Net\Target) refuse the host. In development (Config::allows_private()),
+	 * @throws Refusal When the media downloader's SSRF rules refuse the host. In development (Config::allows_private()),
 	 *                 a plain \RuntimeException when the host cannot be resolved or resolves to addresses it may not reach.
 	 */
 	public static function target( string $url ): array {
@@ -67,7 +67,7 @@ final class Pinned {
 		}
 
 		try {
-			$target = Target::check( $url );
+			$target = Download::target( $url );
 			$safe   = true;
 		} catch ( Refusal $e ) {
 			if ( ! Config::allows_private() ) {
@@ -142,7 +142,7 @@ final class Pinned {
 		$port    = isset( $parts['port'] ) ? (int) $parts['port'] : ( 'https' === $scheme ? 443 : 80 );
 		$literal = Address::literal( $host );
 		// Config::normalize() allows only host names and IPv4 literals, so $host needs no brackets.
-		$addresses = null !== $literal ? array( $literal ) : Target::resolve( $host );
+		$addresses = null !== $literal ? array( $literal ) : Download::resolve( $host );
 		if ( array() === $addresses ) {
 			throw new \RuntimeException( sprintf( 'The gateway host %s could not be resolved.', esc_textarea( $host ) ) );
 		}

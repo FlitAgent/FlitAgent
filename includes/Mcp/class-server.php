@@ -73,11 +73,26 @@ final class Server {
 	private $access_gate;
 
 	/**
+	 * Decides whether the current credential may use tools that are not read-only. Null allows them.
+	 *
+	 * @var callable|null
+	 */
+	private $write_gate;
+
+	/**
 	 * Returns the site details for the initialize result, or null for none. Null adds nothing.
 	 *
 	 * @var callable|null
 	 */
 	private $site_meta;
+
+	/**
+	 * Returns why a tool this site knows is not registered right now (a write tool while Access for AI tools is Read only),
+	 * or null when the name is not such a tool. Null gives every unregistered name "Unknown tool".
+	 *
+	 * @var callable|null
+	 */
+	private $unavailable;
 
 	/**
 	 * Constructor.
@@ -87,15 +102,22 @@ final class Server {
 	 * @param string        $version     Server version.
 	 * @param Tool[]        $tools       Tools to expose.
 	 * @param callable|null $access_gate Returns true when the current caller may use protected tools. Null denies them.
+	 * @param callable|null $write_gate  Returns true when the current credential may use tools not annotated
+	 *                                   `readOnlyHint: true` (a read-scoped credential gets false). Null allows them.
 	 * @param callable|null $site_meta   Returns the array for `_meta["com.flitagent/site"]` in the initialize result, or
 	 *                                   null to leave it out. Null adds nothing.
+	 * @param callable|null $unavailable Takes a tool name that is not registered and returns the message for a caller who
+	 *                                   may use protected tools (why the tool is off on this site), or null for "Unknown
+	 *                                   tool". Never lists or describes the tool. Null: always "Unknown tool".
 	 */
-	public function __construct( string $name, string $title, string $version, array $tools, ?callable $access_gate = null, ?callable $site_meta = null ) {
+	public function __construct( string $name, string $title, string $version, array $tools, ?callable $access_gate = null, ?callable $write_gate = null, ?callable $site_meta = null, ?callable $unavailable = null ) {
 		$this->name        = $name;
 		$this->title       = $title;
 		$this->version     = $version;
 		$this->access_gate = $access_gate;
+		$this->write_gate  = $write_gate;
 		$this->site_meta   = $site_meta;
+		$this->unavailable = $unavailable;
 		foreach ( $tools as $tool ) {
 			$this->tools[ $tool->name() ] = $tool;
 		}
@@ -175,7 +197,7 @@ final class Server {
 				'title'   => $this->title,
 				'version' => $this->version,
 			),
-			'instructions'    => 'Tools from the FlitAgent WordPress plugin for this WordPress site. Requests reach this site through flitagent.com and act as the administrator who connected the site. This version of FlitAgent reads the site and never changes it: every tool is read-only. Start with get_site_info for an overview of the site, or get_health_triage for what needs attention.',
+			'instructions'    => 'Tools from the FlitAgent WordPress plugin for this WordPress site. Requests reach this site through flitagent.com and act as the administrator who connected the site. Write tools (such as update_post) appear only while Access for AI tools is Read and propose changes, the default; an administrator can set it to Read only in wp-admin (FlitAgent > Settings). Every write needs a new idempotency_key per intended change (repeat a key only to retry the same call). Use dry_run: true to see the tier, summary and preview without writing. A write either applies at once (only low-risk, reversible changes an administrator chose to auto-approve) or returns status approval_required with a change_id and approve_url: nothing has changed yet; ask a human to approve it in wp-admin, then call apply_change with that change_id and a new idempotency_key before the approval expires. If the target changed in the meantime the change is stale and must be requested again. Undo a write with rollback_change and its receipt_id; review writes with list_receipts and get_change. Receipts are an audit record kept on the site.',
 		);
 
 		$site = null === $this->site_meta ? null : call_user_func( $this->site_meta );
@@ -204,7 +226,9 @@ final class Server {
 	 * @return array<string, Tool>
 	 */
 	private function available_tools(): array {
-		return $this->filter_tools( $this->can_access_protected() );
+		$can_write = null === $this->write_gate || true === call_user_func( $this->write_gate );
+
+		return $this->filter_tools( $this->can_access_protected(), $can_write );
 	}
 
 	/**
@@ -215,14 +239,17 @@ final class Server {
 	}
 
 	/**
-	 * A short fingerprint of the tool list an administrator sees: the access gate counts as allowed and is not called, so
-	 * every request gets the same value. It changes only when the tool set changes.
+	 * A short fingerprint of the tool list at the connection's paired scope, not the request's: the access gate counts as
+	 * allowed and `$paired_write` decides whether tools without `readOnlyHint: true` are listed. Neither gate callable is
+	 * called, so a read and a write request get the same value. It changes when writes are turned on or off, the paired
+	 * scope changes, or the tool set changes.
 	 *
+	 * @param bool $paired_write Whether the connection is paired for writes.
 	 * @return string 32 lowercase hex characters.
 	 */
-	public function tools_version(): string {
+	public function tools_version( bool $paired_write ): string {
 		$definitions = array();
-		foreach ( $this->filter_tools( true ) as $tool ) {
+		foreach ( $this->filter_tools( true, $paired_write ) as $tool ) {
 			$definitions[] = $tool->definition();
 		}
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Server is WordPress-free.
@@ -230,24 +257,34 @@ final class Server {
 	}
 
 	/**
-	 * The registered tools that pass the access gate's result.
+	 * The registered tools that pass the two gates' results.
 	 *
 	 * @param bool $can_access_protected Whether protected tools are allowed.
+	 * @param bool $can_write            Whether tools that are not read-only are allowed.
 	 * @return array<string, Tool>
 	 */
-	private function filter_tools( bool $can_access_protected ): array {
+	private function filter_tools( bool $can_access_protected, bool $can_write ): array {
 		$available = array();
 		foreach ( $this->tools as $name => $tool ) {
 			if ( ! $can_access_protected && Tool::ACCESS_PUBLIC !== $tool->access() ) {
 				continue;
 			}
-			// Defence in depth: this version is read-only, so a tool is served only if it declares itself read-only.
-			if ( true !== ( $tool->definition()['annotations']['readOnlyHint'] ?? null ) ) {
+			if ( ! $can_write && ! self::is_read_only( $tool ) ) {
 				continue;
 			}
 			$available[ $name ] = $tool;
 		}
 		return $available;
+	}
+
+	/**
+	 * Whether a tool declares itself read-only (`annotations.readOnlyHint` true).
+	 *
+	 * @param Tool $tool Tool.
+	 */
+	private static function is_read_only( Tool $tool ): bool {
+		$definition = $tool->definition();
+		return isset( $definition['annotations']['readOnlyHint'] ) && true === $definition['annotations']['readOnlyHint'];
 	}
 
 	/**
@@ -262,7 +299,7 @@ final class Server {
 		$tools = $this->available_tools();
 		// A protected tool the caller may not use gets the same error as a missing one, so its existence is not revealed.
 		if ( ! is_string( $name ) || ! isset( $tools[ $name ] ) ) {
-			return self::error( $id, self::INVALID_PARAMS, 'Unknown tool' );
+			return self::error( $id, self::INVALID_PARAMS, $this->unknown_tool_message( $name ) );
 		}
 
 		$arguments = array_key_exists( 'arguments', $params ) ? $params['arguments'] : array();
@@ -281,6 +318,11 @@ final class Server {
 			return self::tool_error( $id, 'The tool failed to run.' );
 		}
 
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Server is WordPress-free.
+		if ( false === json_encode( $data ) ) {
+			$data = self::valid_utf8( $data );
+		}
+
 		return self::result(
 			$id,
 			array(
@@ -295,6 +337,47 @@ final class Server {
 				'isError'           => false,
 			)
 		);
+	}
+
+	/**
+	 * A tool's result with invalid UTF-8 replaced by U+FFFD, so that the text and the structured copy read the same:
+	 * left alone, WordPress would encode the structured copy with "?" instead.
+	 *
+	 * @param mixed $value Value.
+	 * @return mixed
+	 */
+	private static function valid_utf8( $value ) {
+		if ( is_string( $value ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Server is WordPress-free.
+			return 1 === preg_match( '//u', $value ) ? $value : (string) json_decode( (string) json_encode( $value, JSON_INVALID_UTF8_SUBSTITUTE ) );
+		}
+		if ( $value instanceof \stdClass ) {
+			return (object) self::valid_utf8( (array) $value );
+		}
+		if ( ! is_array( $value ) ) {
+			return $value;
+		}
+		$out = array();
+		foreach ( $value as $key => $item ) {
+			$out[ is_string( $key ) ? self::valid_utf8( $key ) : $key ] = self::valid_utf8( $item );
+		}
+		return $out;
+	}
+
+	/**
+	 * The message for a tool the caller cannot call: why it is off (Access for AI tools is Read only) when the site knows
+	 * it, is not registering it now and the caller may use protected tools; else "Unknown tool". A registered tool the
+	 * caller's gates filter out (a protected tool, or a write tool for a read-scoped connection) stays "Unknown tool".
+	 *
+	 * @param mixed $name The requested tool name.
+	 * @return string
+	 */
+	private function unknown_tool_message( $name ): string {
+		if ( null === $this->unavailable || ! is_string( $name ) || isset( $this->tools[ $name ] ) || ! $this->can_access_protected() ) {
+			return 'Unknown tool';
+		}
+		$message = call_user_func( $this->unavailable, $name );
+		return is_string( $message ) && '' !== $message ? $message : 'Unknown tool';
 	}
 
 	/**

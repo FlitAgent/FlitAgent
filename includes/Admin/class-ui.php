@@ -11,31 +11,45 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * The shared components of the Flit design language that need markup: the page header with the mark, and the status chip
- * (icon plus text, never colour alone). Everything else is styling of the screens' own markup in assets/css/admin.css.
+ * (icon plus text, never colour alone). Everything else is styling of the screens' own markup in src/scss/admin.scss.
  * Every dynamic value is escaped here; a screen still goes through wp_kses() with allowed_html() when it's printed.
  */
 final class Ui {
 
 	/**
-	 * Status => role, label and Lucide icon, as the design language's status mapping lists them (the connection and diagnostic statuses).
+	 * Status => role, label and Lucide icon, as the design language's status mapping lists them (the stored change,
+	 * receipt and diagnostic statuses, plus the receipt state "rolled back"; applying and stale, which the mapping does
+	 * not list, as info and warning).
 	 *
 	 * @return array<string, array{string, string, string}> Role, label, icon name.
 	 */
 	private static function map(): array {
 		return array(
-			'warning'           => array( 'warning', __( 'Warning', 'flitagent' ), 'alert-triangle' ),
-			'skipped'           => array( 'neutral', __( 'Skipped', 'flitagent' ), 'minus-circle' ),
-			'connected'         => array( 'success', __( 'Connected', 'flitagent' ), 'check' ),
-			'waiting'           => array( 'warning', __( 'Waiting', 'flitagent' ), 'clock' ),
-			'not_connected'     => array( 'danger', __( 'Not connected', 'flitagent' ), 'minus-circle' ),
-			'connected_gateway' => array( 'success', __( 'Connected to flitagent.com', 'flitagent' ), 'check' ),
-			'pass'              => array( 'success', __( 'Pass', 'flitagent' ), 'check' ),
-			'fail'              => array( 'danger', __( 'Fail', 'flitagent' ), 'x-circle' ),
+			'pending'               => array( 'warning', __( 'Pending', 'flitagent' ), 'clock' ),
+			'approved'              => array( 'info', __( 'Approved', 'flitagent' ), 'check' ),
+			'applied'               => array( 'success', __( 'Applied', 'flitagent' ), 'check-check' ),
+			'applied_with_warnings' => array( 'warning', __( 'Applied with warnings', 'flitagent' ), 'alert-triangle' ),
+			'warning'               => array( 'warning', __( 'Warning', 'flitagent' ), 'alert-triangle' ),
+			'verification_failed'   => array( 'danger', __( 'Verification failed', 'flitagent' ), 'x-circle' ),
+			'failed'                => array( 'danger', __( 'Failed', 'flitagent' ), 'x-circle' ),
+			'rejected'              => array( 'danger', __( 'Rejected', 'flitagent' ), 'x' ),
+			'refused'               => array( 'neutral', __( 'Refused', 'flitagent' ), 'minus-circle' ),
+			'expired'               => array( 'neutral', __( 'Expired', 'flitagent' ), 'minus-circle' ),
+			'skipped'               => array( 'neutral', __( 'Skipped', 'flitagent' ), 'minus-circle' ),
+			'rolled_back'           => array( 'reverted', __( 'Rolled back', 'flitagent' ), 'undo-2' ),
+			'applying'              => array( 'info', __( 'Applying', 'flitagent' ), 'clock' ),
+			'stale'                 => array( 'warning', __( 'Changed since approval', 'flitagent' ), 'alert-triangle' ),
+			'connected'             => array( 'success', __( 'Connected', 'flitagent' ), 'check' ),
+			'waiting'               => array( 'warning', __( 'Waiting', 'flitagent' ), 'clock' ),
+			'not_connected'         => array( 'danger', __( 'Not connected', 'flitagent' ), 'minus-circle' ),
+			'connected_gateway'     => array( 'success', __( 'Connected to flitagent.com', 'flitagent' ), 'check' ),
+			'pass'                  => array( 'success', __( 'Pass', 'flitagent' ), 'check' ),
+			'fail'                  => array( 'danger', __( 'Fail', 'flitagent' ), 'x-circle' ),
 		);
 	}
 
 	/**
-	 * Lucide icon shapes (ISC licence, kept in assets/css/admin.css), drawn on a 24px grid with a 2px round stroke.
+	 * Lucide icon shapes (ISC licence, shipped as build/licenses/LICENSE-lucide.txt), drawn on a 24px grid with a 2px round stroke.
 	 *
 	 * @return array<string, string>
 	 */
@@ -43,18 +57,23 @@ final class Ui {
 		return array(
 			'clock'          => '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
 			'check'          => '<path d="M20 6 9 17l-5-5"/>',
+			'check-check'    => '<path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/>',
 			'alert-triangle' => '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
 			'x-circle'       => '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
 			'x'              => '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
 			'minus-circle'   => '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/>',
+			'shield-check'   => '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+			'undo-2'         => '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5 5.5 5.5 0 0 1-5.5 5.5H11"/>',
+			'alert-circle'   => '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
 			'copy'           => '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+			'chevron-right'  => '<path d="m9 18 6-6-6-6"/>',
 		);
 	}
 
 	/**
 	 * A status chip: an icon (decorative) and the status word.
 	 *
-	 * @param string $status A connection status or a diagnostic result; anything else is shown as is, neutral.
+	 * @param string $status A stored status, `rolled_back`, or a diagnostic result; anything else is shown as is, neutral.
 	 * @return string
 	 */
 	public static function chip( string $status ): string {
@@ -67,9 +86,24 @@ final class Ui {
 	}
 
 	/**
-	 * A decorative icon drawn at a size, for screens that need one beside text.
+	 * A tool name in monospace that may wrap only after an underscore (`delete_post_<wbr>permanently`), never mid-word, so
+	 * long names fit narrow table columns and the auto-approve grid (e2e recheck 2026-10-30, N1 and N2).
 	 *
-	 * @param string $name Icon name from the set above, e.g. clock.
+	 * @param string $name Tool name (plain text).
+	 * @return string Escaped HTML.
+	 */
+	public static function tool_name( string $name ): string {
+		$parts = array();
+		foreach ( explode( '_', $name ) as $part ) {
+			$parts[] = esc_html( $part );
+		}
+		return '<code class="flitagent-mcp-tool">' . implode( '_<wbr>', $parts ) . '</code>';
+	}
+
+	/**
+	 * A decorative icon drawn at a size, for screens that need one beside text (the empty Approvals card).
+	 *
+	 * @param string $name Icon name from the set above, e.g. shield-check.
 	 * @param int    $size Width and height in px.
 	 * @return string Empty for an unknown name.
 	 */
@@ -149,8 +183,10 @@ final class Ui {
 	}
 
 	/**
-	 * What FlitAgent's screens may print, for wp_kses(): exactly the elements and attributes they use. No script, style,
-	 * frame, event handler or style attribute, and of the `data-` attributes only FlitAgent's own.
+	 * What FlitAgent's screens may print, for wp_kses(): the elements and attributes they use, plus `col` and `colgroup` for
+	 * the diff markup of older WordPress and the form attributes a field may need. No script, style,
+	 * frame, event handler or style attribute, and of the `data-` attributes only FlitAgent's own, with one exception:
+	 * `data-colname` on table cells.
 	 *
 	 * @return array<string, array<string, bool>>
 	 */
@@ -166,12 +202,17 @@ final class Ui {
 			'br'       => array(),
 			'button'   => array( 'disabled', 'form', 'name', 'type', 'value' ),
 			'circle'   => array_merge( $shape, array( 'cx', 'cy', 'r' ) ),
-			'code'     => array(),
+			'code'     => array( 'title' ),
+			'col'      => array(),
+			'colgroup' => array(),
 			'dd'       => array(),
+			'del'      => array(),
+			'details'  => array( 'open' ),
 			'dialog'   => array( 'open' ),
-			'div'      => array(),
+			'div'      => array( 'tabindex' ),
 			'dl'       => array(),
 			'dt'       => array(),
+			'fieldset' => array(),
 			'form'     => array( 'action', 'autocomplete', 'method' ),
 			'h1'       => array(),
 			'h2'       => array(),
@@ -179,24 +220,33 @@ final class Ui {
 			'header'   => array(),
 			'hr'       => array(),
 			'input'    => array( 'autocomplete', 'checked', 'disabled', 'form', 'max', 'min', 'name', 'placeholder', 'readonly', 'type', 'value' ),
+			'ins'      => array(),
 			'label'    => array( 'for' ),
+			'legend'   => array(),
 			'li'       => array(),
 			'noscript' => array(),
 			'ol'       => array(),
+			'option'   => array( 'selected', 'value' ),
 			'p'        => array(),
 			'path'     => array_merge( $shape, array( 'd' ) ),
+			'pre'      => array(),
 			'rect'     => array_merge( $shape, array( 'height', 'rx', 'ry', 'width', 'x', 'y' ) ),
 			'section'  => array(),
-			'span'     => array(),
+			'select'   => array( 'name' ),
+			'span'     => array( 'title' ),
 			'strong'   => array(),
+			'summary'  => array(),
 			'svg'      => array_merge( $shape, array( 'focusable', 'height', 'viewbox', 'width', 'xmlns' ) ),
 			'table'    => array(),
 			'tbody'    => array(),
-			'td'       => array(),
-			'th'       => array( 'scope' ),
+			// data-colname is the one data attribute that is not FlitAgent's own: core's list-tables.css reads it to label each
+			// cell on a narrow screen. Screens::list_table() prints it, on table cells only, and it holds a column's label.
+			'td'       => array( 'data-colname' ),
+			'th'       => array( 'data-colname', 'scope' ),
 			'thead'    => array(),
 			'tr'       => array(),
 			'ul'       => array(),
+			'wbr'      => array(),
 		);
 
 		$allowed = array();

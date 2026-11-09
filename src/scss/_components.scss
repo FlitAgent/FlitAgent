@@ -1,0 +1,306 @@
+// The design language's component set that FlitAgent's own markup uses (Admin\Ui and the screens), inside
+// .flitagent-wrap only.
+@use "icons";
+
+.flitagent-wrap {
+
+	// Page header, the same on every screen as on every board: the bird mark (30px), the wordmark
+	// and the Newsreader title at the boards' 28px (no token has it), with no rule below; the content follows 20px under
+	// it.
+	.flitagent-header {
+		display: flex;
+		align-items: center;
+		gap: var(--flit-space-3);
+		margin-bottom: var(--flit-space-5);
+		padding: 0;
+		border: 0;
+
+		h1 {
+			margin: 0;
+			padding: 0;
+			color: var(--flit-color-fg);
+			font-family: var(--flit-font-display);
+			font-size: 28px;
+			font-weight: var(--flit-font-weight-medium);
+			letter-spacing: -0.02em;
+			line-height: 1.2;
+		}
+	}
+
+	// The mark is a full-colour illustration, shown as shipped: never recoloured.
+	.flitagent-mark {
+		flex: none;
+		width: 30px;
+		height: 30px;
+		background: url(../flit-design/flitagent-mark.svg) center / contain no-repeat;
+	}
+
+	.flitagent-wordmark {
+		margin: 0;
+		color: var(--flit-color-fg-muted);
+		font-family: var(--flit-font-display);
+		font-size: var(--flit-font-size-sm);
+		font-weight: var(--flit-font-weight-medium);
+		line-height: var(--flit-line-height-sm);
+	}
+
+	// Card: paper, hairline, 18px radius, soft shadow. Never nested.
+	.flitagent-card {
+		margin: 0 0 var(--flit-space-6);
+		padding: var(--flit-space-6);
+		border: var(--flit-border-width-hairline) solid var(--flit-color-border);
+		border-radius: var(--flit-radius-xl);
+		background: var(--flit-color-surface);
+		box-shadow: var(--flit-shadow-card);
+
+		> :first-child {
+			margin-top: 0;
+		}
+
+		> :last-child {
+			margin-bottom: 0;
+		}
+
+		@media screen and (max-width: 600px) {
+			padding: var(--flit-space-4);
+		}
+	}
+
+	.flitagent-empty {
+		color: var(--flit-color-fg-muted);
+	}
+
+	// Status chip: pill, glyph plus the status word (A3: never colour alone). Roles follow the status mapping of the
+	// design language: pending, applied_with_warnings and the diagnostics warning are warning; approved is info;
+	// applied and pass are success; failed, verification_failed, rejected and fail are danger; rolled back is reverted;
+	// refused, expired and skipped are neutral.
+	.flitagent-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--flit-space-1);
+		padding: 2px var(--flit-space-2);
+		border-radius: var(--flit-radius-full);
+		background: var(--flit-color-neutral-bg);
+		color: var(--flit-color-neutral-fg);
+		font-size: var(--flit-font-size-xs);
+		font-weight: var(--flit-font-weight-medium);
+		line-height: var(--flit-line-height-xs);
+		white-space: nowrap;
+
+		@each $role in (info, success, warning, danger, reverted) {
+
+			&.flitagent-chip--#{$role} {
+				background: var(--flit-color-#{$role}-bg);
+				color: var(--flit-color-#{$role}-fg);
+			}
+		}
+	}
+
+	.flitagent-chip-icon {
+		flex: none;
+		width: 12px;
+		height: 12px;
+	}
+
+	// In fixed-layout tables the column decides the width: the chip's words wrap inside its cell, the icon stays on
+	// the first line.
+	.flitagent-table .flitagent-chip {
+		align-items: flex-start;
+		white-space: normal;
+		max-width: 100%;
+
+		.flitagent-chip-icon {
+			margin-top: 2px;
+		}
+	}
+
+	// Notice (FlitAgent's own; core notices other code prints keep core's look): 4px bar in the -icon colour, -bg
+	// fill, ink text, a glyph plus the sentence.
+	.flitagent-notice {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--flit-space-3);
+		margin: 0 0 var(--flit-space-4);
+		padding: var(--flit-space-3) var(--flit-space-4);
+		border: 0;
+		border-left: var(--flit-border-width-notice-bar) solid var(--flit-color-info-icon);
+		border-radius: var(--flit-radius-md);
+		background: var(--flit-color-info-bg);
+		box-shadow: none;
+		color: var(--flit-color-fg);
+
+		&::before {
+			content: "";
+			flex: none;
+			width: 20px;
+			height: 20px;
+			margin-top: 1px;
+			background: var(--flit-color-info-fg);
+			mask: icons.$info center / contain no-repeat;
+		}
+
+		p {
+			margin: 0;
+			padding: 0;
+		}
+
+		&.is-dismissible {
+			padding-right: var(--flit-space-10);
+		}
+
+		// Core's notice class, the role and its glyph.
+		@each $class, $role, $glyph in (success, success, icons.$success), (warning, warning, icons.$warning), (error, danger, icons.$danger) {
+
+			&.notice-#{$class} {
+				border-left-color: var(--flit-color-#{$role}-icon);
+				background: var(--flit-color-#{$role}-bg);
+
+				&::before {
+					background: var(--flit-color-#{$role}-fg);
+					mask-image: $glyph;
+				}
+			}
+		}
+	}
+
+	// Receipt and change IDs in full, in mono, selectable.
+	.flitagent-id {
+		font-family: var(--flit-font-mono);
+		user-select: all;
+	}
+
+	// The change's facts: label above value on narrow screens, side by side from sm.
+	.flitagent-facts {
+		display: grid;
+		grid-template-columns: max-content 1fr;
+		gap: var(--flit-space-3) var(--flit-space-6);
+		margin: 0;
+
+		dt {
+			color: var(--flit-color-fg-muted);
+			font-size: var(--flit-font-size-sm);
+		}
+
+		dd {
+			margin: 0;
+			overflow-wrap: anywhere;
+		}
+
+		@media screen and (max-width: 600px) {
+			grid-template-columns: 1fr;
+			gap: 0;
+
+			dd {
+				margin-bottom: var(--flit-space-3);
+			}
+		}
+	}
+
+	// Diff: header and legend (A6), rows in mono on the sunken surface, added rows success-bg with "+", removed
+	// danger-bg with "−" and struck-through text. Core's wp_text_diff() markup with its own +/− markers.
+	.flitagent-diff-legend {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--flit-space-2);
+
+		span {
+			padding: 2px var(--flit-space-2);
+			border-radius: var(--flit-radius-sm);
+			font-family: var(--flit-font-mono);
+			font-size: var(--flit-font-size-xs);
+		}
+	}
+
+	.flitagent-diff-legend-removed {
+		background: var(--flit-color-danger-bg);
+		color: var(--flit-color-danger-fg);
+	}
+
+	.flitagent-diff-legend-added {
+		background: var(--flit-color-success-bg);
+		color: var(--flit-color-success-fg);
+	}
+
+	.flitagent-diff-field {
+		margin: var(--flit-space-4) 0 var(--flit-space-2);
+		font-family: var(--flit-font-sans);
+		font-size: var(--flit-font-size-sm);
+		letter-spacing: normal;
+	}
+
+	.flitagent-diff {
+		overflow-x: auto;
+		border-radius: var(--flit-radius-md);
+		background: var(--flit-color-surface-sunken);
+
+		table.diff {
+			width: 100%;
+			border-collapse: collapse;
+			color: var(--flit-color-fg);
+			font-family: var(--flit-font-mono);
+			font-size: var(--flit-font-size-sm);
+			line-height: var(--flit-line-height-sm);
+		}
+
+		.diff th {
+			padding: var(--flit-space-2) var(--flit-space-3);
+			color: var(--flit-color-fg-muted);
+			font-family: var(--flit-font-sans);
+			font-weight: var(--flit-font-weight-medium);
+			text-align: left;
+		}
+
+		// The left padding leaves room for core's +/− marker, which core positions at the cell's left edge.
+		.diff td {
+			padding: var(--flit-space-1) var(--flit-space-3) var(--flit-space-1) var(--flit-space-8);
+			border-top: var(--flit-border-width-hairline) solid var(--flit-color-border);
+			font-family: var(--flit-font-mono);
+			vertical-align: top;
+			overflow-wrap: anywhere;
+		}
+
+		.diff .diff-addedline {
+			background: var(--flit-color-success-bg);
+
+			ins {
+				background: transparent;
+				color: var(--flit-color-success-fg);
+				font-weight: var(--flit-font-weight-semibold);
+				text-decoration: underline;
+			}
+
+			.dashicons {
+				color: var(--flit-color-success-fg);
+			}
+		}
+
+		.diff .diff-deletedline {
+			background: var(--flit-color-danger-bg);
+
+			// A whole removed line comes without <del> (core marks only changed words with it): strike the line itself.
+			&:not(:has(del)) {
+				color: var(--flit-color-danger-fg);
+				text-decoration: line-through;
+			}
+
+			del {
+				background: transparent;
+				color: var(--flit-color-danger-fg);
+				text-decoration: line-through;
+			}
+
+			.dashicons {
+				color: var(--flit-color-danger-fg);
+			}
+		}
+
+		.diff .diff-context {
+			background: var(--flit-color-surface-sunken);
+		}
+	}
+
+	// A10: tables that cannot collapse scroll on their own.
+	.flitagent-table-scroll {
+		overflow-x: auto;
+	}
+}

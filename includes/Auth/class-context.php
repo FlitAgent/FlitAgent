@@ -11,9 +11,9 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * The credential behind the current MCP request: its method (a request signed by flitagent.com, or none), its scope
- * (read or write, as flitagent.com paired it; this version serves read-only tools for either) and the AI app it belongs
- * to. The gateway authenticator sets it once it accepts a request; everything else reads it. Without one the request
- * has no credential: read scope and no client. WordPress-free.
+ * (read or write) and the AI app it belongs to. The gateway authenticator sets it once it accepts a request;
+ * everything else reads it. Without one the request has no credential: read scope and no client, so nothing can
+ * write. WordPress-free.
  */
 final class Context {
 
@@ -115,6 +115,25 @@ final class Context {
 	 */
 	public function scope(): string {
 		return $this->scope;
+	}
+
+	/**
+	 * Whether the credential may write.
+	 */
+	public function allows_writes(): bool {
+		return self::SCOPE_WRITE === $this->scope;
+	}
+
+	/**
+	 * The access AI tools get on a site: write only while its Access for AI tools is Read and propose changes (writes
+	 * on) and the scope (the connection's, or an app's) is write; read otherwise.
+	 *
+	 * @param bool   $writes_enabled Whether writes are on (WpPolicy::writes_enabled()).
+	 * @param string $scope          A scope constant.
+	 * @return string SCOPE_READ or SCOPE_WRITE.
+	 */
+	public static function access( bool $writes_enabled, string $scope ): string {
+		return $writes_enabled && self::SCOPE_WRITE === $scope ? self::SCOPE_WRITE : self::SCOPE_READ;
 	}
 
 	/**

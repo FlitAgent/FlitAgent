@@ -7,6 +7,8 @@
 
 namespace FlitAgent\Tools\Triage;
 
+use FlitAgent\Writes\Packages\Core\Readiness;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -21,7 +23,7 @@ final class UpdateSnapshot {
 	 * @return array<string, mixed>
 	 */
 	public static function read(): array {
-		$backup = Backup::detect();
+		$backup = Readiness::backup();
 		return array(
 			'now'       => time(),
 			'wordpress' => (string) get_bloginfo( 'version' ),

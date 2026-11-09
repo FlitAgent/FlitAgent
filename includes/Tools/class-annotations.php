@@ -17,16 +17,18 @@ final class Annotations {
 	/**
 	 * Annotations for a tool that only reads: no changes, same result for the same state.
 	 *
-	 * @param string $title Human-readable title.
+	 * @param string $title      Human-readable title.
+	 * @param bool   $open_world True only if the tool reaches a service outside this site (e.g. WordPress.org); a tool
+	 *                           that reads only this site, even over HTTP, is closed-world.
 	 * @return array<string, mixed>
 	 */
-	public static function read_only( string $title ): array {
+	public static function read_only( string $title, bool $open_world = false ): array {
 		return array(
 			'title'           => $title,
 			'readOnlyHint'    => true,
 			'destructiveHint' => false,
 			'idempotentHint'  => true,
-			'openWorldHint'   => false,
+			'openWorldHint'   => $open_world,
 		);
 	}
 }

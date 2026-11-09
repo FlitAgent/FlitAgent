@@ -7,7 +7,7 @@
 
 namespace FlitAgent\Auth\Gateway;
 
-use FlitAgent\Auth\Net\Address;
+use FlitAgent\Writes\Media\Address;
 
 defined( 'ABSPATH' ) || exit;
 

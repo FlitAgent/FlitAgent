@@ -10,6 +10,7 @@ namespace FlitAgent\Tools\Triage;
 use FlitAgent\Tools\CachedUpdates;
 use FlitAgent\Tools\SiteHealth;
 use FlitAgent\Tools\System\Constants;
+use FlitAgent\Tools\Woo\WpSource;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -40,6 +41,7 @@ final class SiteSnapshot {
 			// WordPress defines WP_DEBUG_DISPLAY as true when wp-config.php does not.
 			'debug_display'     => (bool) $constants->get( 'WP_DEBUG_DISPLAY', true ),
 			'site_health'       => SiteHealth::saved_counts(),
+			'woo'               => class_exists( 'WooCommerce' ) ? ( new WpSource() )->triage( time() ) : null,
 		);
 	}
 

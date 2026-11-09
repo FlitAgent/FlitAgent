@@ -14,7 +14,7 @@ use FlitAgent\Tools\Triage\Triage;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Health triage (#118): what is wrong with the site, how serious it is, and what to do about it in wp-admin.
+ * Health triage (#118): what is wrong with the site, how serious it is, and which FlitAgent tool fixes it.
  */
 final class HealthTriage implements Tool {
 
@@ -55,7 +55,7 @@ final class HealthTriage implements Tool {
 		return Definition::read_only(
 			$this->name(),
 			'Triage FlitAgent site health',
-			'checks the site for problems and returns findings, most serious first: plugin, theme and WordPress updates, inactive plugins and unused themes, cron tasks more than an hour late, stuck maintenance mode, PHP errors shown to visitors, and critical issues from the last saved Site Health check. Each finding has an id, severity (critical, warning, info), title and detail; the detail says in plain words what a person should do in wp-admin. FlitAgent only reads: it changes nothing on the site. summary counts findings per severity. Uses only data WordPress already cached and never contacts wordpress.org; run it first when asked to check or review a site.'
+			'checks the site for problems and returns findings, most serious first: plugin, theme and WordPress updates, inactive plugins and unused themes, cron tasks more than an hour late, stuck maintenance mode, PHP errors shown to visitors, and critical issues from the last saved Site Health check, and on WooCommerce stores a pending database update, failed and on-hold orders from the last 7 days, outdated template overrides and out-of-stock products. Each finding has an id, severity (critical, warning, info), title, detail and fix: the FlitAgent tool and arguments that fix it (add an idempotency_key; the fix still needs approval like any write), or null when only a person can fix it. To fix several at once, pass the fixes as items to submit_plan so an administrator approves them together. summary counts findings per severity. Uses only data WordPress already cached and never contacts wordpress.org; run it first when asked to check, maintain or fix a site.'
 		);
 	}
 

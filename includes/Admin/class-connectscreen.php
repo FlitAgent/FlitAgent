@@ -16,6 +16,7 @@ use FlitAgent\Auth\Gateway\Keys;
 use FlitAgent\Auth\Gateway\Pairing;
 use FlitAgent\Auth\Gateway\StatusNudge;
 use FlitAgent\Auth\Gateway\WpStore;
+use FlitAgent\Writes\Wp\WpPolicy;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -23,7 +24,7 @@ defined( 'ABSPATH' ) || exit;
  * Connects this site to flitagent.com and tells an administrator how to add flitagent.com to an AI app: the state of the
  * pairing (not connected, waiting, connected) with its actions, then the MCP address with a Copy button and the guides.
  * Opening the screen sends nothing to flitagent.com unless the site is connected (then it refreshes the gateway's key
- * set). Every dynamic value is escaped here, so callers may echo it.
+ * set). Every dynamic value is escaped here; Admin prints the result through wp_kses() with Ui::allowed_html().
  */
 final class ConnectScreen {
 
@@ -44,13 +45,13 @@ final class ConnectScreen {
 	const TAB_FAILED    = 'failed';
 
 	/**
-	 * Query arg naming the tool whose "is connected" dialog to show (tool-status.js reloads with it once the tool it was
+	 * Query arg naming the tool whose "is connected" dialog to show (tool-status.ts reloads with it once the tool it was
 	 * waiting for reads Connected).
 	 */
 	const DONE = 'flitagent_connected';
 
 	/**
-	 * Attribute of a link that opens an AI tool's site: tool-status.js opens it in a tab it keeps a handle to (named
+	 * Attribute of a link that opens an AI tool's site: tool-status.ts opens it in a tab it keeps a handle to (named
 	 * `flitagent-<tool>`), so it can close that tab once the tool reads Connected.
 	 */
 	const OPEN_TOOL = 'data-flitagent-open-tool';
@@ -182,9 +183,10 @@ final class ConnectScreen {
 	 * Facts about this site and its connection.
 	 *
 	 * @param bool $refresh Whether to refresh the gateway's key set while connected (its failure goes in `key_error`).
-	 * @return array{state: string, https_address: bool, scope: string, account_hint: string, paired_at: int, pending_at: int, last_request: int, ended: int, gateway: string, check_url: string, account_url: string, mcp_url: string, local: bool, https: bool, key_error: string, site: string, host: string, tools: array<string, array{names: string[], scope: string, first_seen: int, last_seen: int, last_request: int}>, blocked: string[], setup: string, closing: string, done: string, status_url: string}
+	 * @return array{state: string, https_address: bool, scope: string, account_hint: string, paired_at: int, pending_at: int, last_request: int, ended: int, gateway: string, check_url: string, account_url: string, mcp_url: string, local: bool, https: bool, writes: bool, multisite: bool, key_error: string, site: string, host: string, tools: array<string, array{names: string[], scope: string, first_seen: int, last_seen: int, last_request: int}>, blocked: string[], setup: string, closing: string, done: string, status_url: string}
 	 */
 	public static function facts( bool $refresh = false ): array {
+		$policy     = new WpPolicy();
 		$store      = new WpStore();
 		$apps       = new Apps( $store );
 		$gateway    = Config::url();
@@ -222,6 +224,8 @@ final class ConnectScreen {
 			'local'         => self::is_local( $home, $site_mcp, $gateway ),
 			'https'         => is_ssl() && $https_address,
 			'https_address' => $https_address,
+			'writes'        => $policy->writes_enabled(),
+			'multisite'     => $policy->is_multisite(),
 			'key_error'     => $key_error,
 			'site'          => wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES ),
 			'host'          => (string) wp_parse_url( $home, PHP_URL_HOST ),
@@ -293,7 +297,7 @@ final class ConnectScreen {
 	/**
 	 * The screen from facts: the Site connectivity card, the Connected AI tools card and, while connected, the dialogs
 	 * (Disconnect a tool, Disconnect site, Set up a tool). The dialogs are native `<dialog>` elements that the admin
-	 * script opens (assets/js/dialog.js); without it the Disconnect forms submit straight away and a Set up link
+	 * script opens (src/admin/dialog.ts); without it the Disconnect forms submit straight away and a Set up link
 	 * reloads the screen with that dialog open on the page.
 	 *
 	 * @param array<string, mixed> $facts Facts (see facts()).
@@ -426,8 +430,11 @@ final class ConnectScreen {
 		}
 		$rows[ __( 'Account', 'flitagent' ) ] = esc_html( (string) $facts['account_hint'] );
 		if ( $access ) {
-			// The beta can only read, whatever scope an older connection was paired with.
-			$rows[ __( 'Access', 'flitagent' ) ] = esc_html__( 'Read only', 'flitagent' );
+			// The site's access for AI tools, changed in Settings with no reconnect; a connection paired for reading only
+			// (Pairing::complete() accepts it) stays read whatever the setting, so it says how to allow changes instead.
+			$rows[ __( 'Access', 'flitagent' ) ] = esc_html( self::access_label( $facts, (string) $facts['scope'] ) ) . ' · ' . ( Context::SCOPE_READ === $facts['scope']
+				? esc_html__( 'Connected for reading only. Disconnect and connect again to allow changes.', 'flitagent' )
+				: '<a href="' . esc_url( admin_url( 'admin.php?page=flitagent-settings' ) ) . '">' . esc_html__( 'Change', 'flitagent' ) . '<span class="screen-reader-text"> ' . esc_html__( 'access for AI tools', 'flitagent' ) . '</span></a>' );
 		}
 		$rows[ __( 'Connected since', 'flitagent' ) ]                 = esc_html( self::time( (int) $facts['paired_at'] ) );
 		$rows[ __( 'Last request from flitagent.com', 'flitagent' ) ] = $last > 0 ? esc_html( self::time( $last ) ) : self::no_request_yet( (string) ( $facts['check_url'] ?? '' ) );
@@ -475,7 +482,7 @@ final class ConnectScreen {
 			$label = self::tool_label( $tool );
 			$sr    = '<span class="screen-reader-text"> ' . esc_html( $label ) . '</span>';
 			if ( $site && isset( $tools[ $tool ] ) ) {
-				$sub    = self::tool_line( $tool, $tools[ $tool ] );
+				$sub    = self::tool_line( $facts, $tool, $tools[ $tool ] );
 				$chip   = Ui::chip( 'connected' );
 				$action = self::post_form( AdminSection::DISCONNECT_APP, $tool, 'flitagent-disconnect-' . $tool . '-form', '<button type="submit" class="button" data-flitagent-dialog="flitagent-disconnect-' . esc_attr( $tool ) . '">' . esc_html__( 'Disconnect', 'flitagent' ) . $sr . '</button>', $guide );
 			} elseif ( $site && in_array( $tool, $blocked, true ) ) {
@@ -498,8 +505,8 @@ final class ConnectScreen {
 	}
 
 	/**
-	 * While the site is connected, where tool-status.js asks for the tools' state (ToolStatusRoute) and the `wp_rest`
-	 * nonce it sends, as attributes of the tool list; '' otherwise.
+	 * While the site is connected, where tool-status.ts asks for the tools' state (ToolStatusRoute), the `wp_rest` nonce it
+	 * sends and the nonce its links to a dialog carry, as attributes of the tool list; '' otherwise.
 	 *
 	 * @param array<string, mixed> $facts Facts.
 	 * @return string
@@ -513,21 +520,23 @@ final class ConnectScreen {
 	}
 
 	/**
-	 * The line under a connected tool: (for Manual configuration, the clients behind it,) its access (always Read
-	 * only), when it was connected and its last request, or "no requests yet" while flitagent.com has only announced it.
+	 * The line under a connected tool: (for Manual configuration, the clients behind it,) its access (the site's, within
+	 * the tool's scope), when it was connected and its last request, or "no requests yet" while flitagent.com has only
+	 * announced it.
 	 *
-	 * @param string                                                                                     $tool Tool.
-	 * @param array{names: string[], scope: string, first_seen: int, last_seen: int, last_request?: int} $info What Apps::tools() says.
+	 * @param array<string, mixed>                                                                       $facts Facts.
+	 * @param string                                                                                     $tool  Tool.
+	 * @param array{names: string[], scope: string, first_seen: int, last_seen: int, last_request?: int} $info  What Apps::tools() says.
 	 * @return string Escaped.
 	 */
-	private static function tool_line( string $tool, array $info ): string {
+	private static function tool_line( array $facts, string $tool, array $info ): string {
 		$last = (int) ( $info['last_request'] ?? $info['last_seen'] );
 		if ( $last > 0 ) {
 			/* translators: 1: the access, such as Read only, 2: when the tool was connected, 3: its last request. */
-			$line = sprintf( __( '%1$s · connected %2$s · last request %3$s', 'flitagent' ), __( 'Read only', 'flitagent' ), self::time( (int) $info['first_seen'] ), self::time( $last ) );
+			$line = sprintf( __( '%1$s · connected %2$s · last request %3$s', 'flitagent' ), self::access_label( $facts, (string) $info['scope'] ), self::time( (int) $info['first_seen'] ), self::time( $last ) );
 		} else {
 			/* translators: 1: the access, such as Read only, 2: when the tool was connected. */
-			$line = sprintf( __( '%1$s · connected %2$s · no requests yet', 'flitagent' ), __( 'Read only', 'flitagent' ), self::time( (int) $info['first_seen'] ) );
+			$line = sprintf( __( '%1$s · connected %2$s · no requests yet', 'flitagent' ), self::access_label( $facts, (string) $info['scope'] ), self::time( (int) $info['first_seen'] ) );
 		}
 		if ( Apps::MANUAL === $tool && array() !== $info['names'] ) {
 			/* translators: 1: the clients behind Manual configuration, such as Claude Code, 2: their access and times. */
@@ -664,7 +673,7 @@ final class ConnectScreen {
 	}
 
 	/**
-	 * The "is connected" dialog, open, for the tool the request names (`done`, after tool-status.js saw it turn
+	 * The "is connected" dialog, open, for the tool the request names (`done`, after tool-status.ts saw it turn
 	 * Connected) while that tool is connected, or ''. A close button, the tool's mark with a check, a first question to
 	 * copy and, for ChatGPT and Claude, Try now: a new chat in that tool with the question filled in. Manual
 	 * configuration finishes in the terminal, so it has no chat to open and no Try now.
@@ -709,7 +718,7 @@ final class ConnectScreen {
 
 	/**
 	 * The "is connected" dialog's first question: "Let’s check", the question in quotation marks and a Copy button
-	 * (CopyButton in assets/js/copy-button.js) that copies it without them and says "Copied" in the card's live
+	 * (CopyButton in src/admin/copy-button.ts) that copies it without them and says "Copied" in the card's live
 	 * region. Where the browser copies nothing, the script selects the question (`<id>-question`) instead.
 	 *
 	 * @param string $id       The dialog's id.
@@ -820,8 +829,10 @@ final class ConnectScreen {
 	}
 
 	/**
-	 * What connecting does, then the Connect button (or why it cannot). Both connect forms (this one and setup step 3)
-	 * ask flitagent.com for read access: the beta cannot change a site.
+	 * What connecting does, then the Connect button (or why it cannot). Both connect forms (this one and setup step 3,
+	 * #209) offer flitagent.com write access as the ceiling, not as a choice: what AI tools may do is the site's own
+	 * setting (Access for AI tools in Settings, setup step 4), and the connection keeps what was granted
+	 * (Pairing::complete() accepts read or write).
 	 *
 	 * @param array<string, mixed> $facts Facts.
 	 * @param bool                 $guide Whether in the setup guide.
@@ -835,9 +846,9 @@ final class ConnectScreen {
 			return $html . $blocker;
 		}
 
-		$scope = '<input type="hidden" name="scope" value="' . esc_attr( Context::SCOPE_READ ) . '" />';
+		$scope = '<input type="hidden" name="scope" value="' . esc_attr( Context::SCOPE_WRITE ) . '" />';
 		if ( ! $guide ) {
-			$scope .= '<p class="description">' . esc_html__( 'AI tools can read this site but cannot change it. Requests act as you and still need your administrator access.', 'flitagent' ) . '</p>';
+			$scope .= '<p class="description">' . esc_html__( 'What AI tools may do on this site is one setting in FlitAgent → Settings, Read and propose changes by default. Requests act as you and still need your administrator access. Proposed changes wait in Approvals unless your policy approves them automatically.', 'flitagent' ) . '</p>';
 		}
 
 		return $html . self::https_notice( $facts ) . self::connect_form_open() . $scope
@@ -1003,6 +1014,29 @@ final class ConnectScreen {
 		return '<div class="flitagent-field"><label for="' . esc_attr( $id ) . '">' . esc_html( $label ) . '</label>'
 			. '<span class="flitagent-copy-row"><input type="text" id="' . esc_attr( $id ) . '" class="large-text code" value="' . esc_attr( $value ) . '" readonly /> '
 			. '<button type="button" class="button" data-flitagent-copy="' . esc_attr( $id ) . '">' . esc_html__( 'Copy', 'flitagent' ) . '</button></span></div>';
+	}
+
+	/**
+	 * Label of a scope.
+	 *
+	 * @param string $scope Scope.
+	 * @return string
+	 */
+	public static function scope_label( string $scope ): string {
+		return Context::SCOPE_WRITE === $scope ? __( 'Read and propose changes', 'flitagent' ) : __( 'Read only', 'flitagent' );
+	}
+
+	/**
+	 * Label of the access AI tools get within a scope (Context::access()): Read and propose changes only while the site's
+	 * Access for AI tools allows changes (`writes` in the facts), the site is not multisite (every write is refused
+	 * there) and the scope is write.
+	 *
+	 * @param array<string, mixed> $facts Facts.
+	 * @param string               $scope The connection's or the tool's scope.
+	 * @return string
+	 */
+	private static function access_label( array $facts, string $scope ): string {
+		return self::scope_label( Context::access( ! empty( $facts['writes'] ) && empty( $facts['multisite'] ), $scope ) );
 	}
 
 	/**

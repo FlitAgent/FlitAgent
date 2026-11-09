@@ -11,10 +11,12 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Runs once per schema version, on `admin_init`: drops the four pre-release OAuth tables and their version option,
- * deletes a v1 gateway connection or pending pairing (they held a `public_key`; a v2 connection is kept), and brings the
- * connection's last request down to the latest request of a connected AI tool (version 4: before it, announcements and
- * the relay's own requests counted). A failed run is retried at most once a day. The table names live here, not in the
- * OAuth module, so uninstall can still drop them once that module is gone.
+ * deletes a v1 gateway connection or pending pairing (they held a `public_key`; a v2 connection is kept) and expires
+ * the pending or approved changes queued by the removed OAuth and application-password clients (their client ids do
+ * not start with `fa:`, so the gateway could never apply them anyway), and brings the connection's last request down to
+ * the latest request of a connected AI tool (version 4: before it, announcements and the relay's own requests counted).
+ * A failed run is retried at most once a day. The
+ * table names live here, not in the OAuth module, so uninstall can still drop them once that module is gone.
  */
 final class Upgrade {
 
@@ -44,7 +46,7 @@ final class Upgrade {
 	}
 
 	/**
-	 * Drops the OAuth leftovers and the v1 gateway data, and corrects the connection's last request.
+	 * Drops the OAuth leftovers and the v1 gateway data, and expires changes queued by the removed clients.
 	 *
 	 * @return bool Whether every table dropped; when not, the version is not stored and the run is retried after a day.
 	 */
@@ -56,6 +58,7 @@ final class Upgrade {
 				delete_option( $option );
 			}
 		}
+		self::expire_legacy_changes();
 		self::correct_last_request( new WpStore() );
 		return $dropped;
 	}
@@ -83,6 +86,16 @@ final class Upgrade {
 			// An earlier time is always written (save_last_request() only throttles later ones); 0 reads "None yet".
 			$store->save_last_request( $latest );
 		}
+	}
+
+	/**
+	 * Marks pending and approved changes whose client id is not a gateway one (`fa:...`) as expired, so none can be
+	 * approved or applied. `Tables::maybe_upgrade()` normally creates the table first; if it is missing anyway, the query fails and the result is ignored.
+	 */
+	private static function expire_legacy_changes(): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- upgrade, fixed table name and constants.
+		$wpdb->query( "UPDATE `{$wpdb->prefix}flitagent_changes` SET status = 'expired' WHERE status IN ('pending','approved') AND client_id NOT LIKE 'fa:%'" );
 	}
 
 	/**

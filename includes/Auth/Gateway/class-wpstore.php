@@ -19,8 +19,10 @@ defined( 'ABSPATH' ) || exit;
  * key set is stored with the start time of the fetch that produced it and replaced only by compare-and-swap with a
  * later-started one (its first save is an INSERT IGNORE), and always read from its row, never from the object cache;
  * the lock only saves duplicate fetches. The revoked apps are changed the same way (compare-and-swap, read from the row),
- * so two revokes of different apps at once both land.
- * Everything is removed on uninstall when "Remove data on uninstall" is on (`FlitAgent\Uninstall::run()` calls
+ * so two revokes of different apps at once both land. The pairing lock is an option row taken by one INSERT IGNORE
+ * and released by a delete of its own value (see lock_pairing()); add_connection() stores the connection the same
+ * add-only way.
+ * Everything is removed on uninstall when "Remove data on uninstall" is on (`Writes\Wp\Tables::uninstall()` calls
  * uninstall()); without it everything but the nonce table and its version still goes (disconnect()).
  */
 final class WpStore implements Store {
@@ -37,12 +39,18 @@ final class WpStore implements Store {
 	const OPTION_REVOKED_APPS = 'flitagent_gateway_revoked_apps';
 	const OPTION_ENDED        = 'flitagent_gateway_ended';
 	const OPTION_STATUS_NUDGE = 'flitagent_gateway_status_nudge';
-	const OPTIONS             = array( self::OPTION_CONNECTION, self::OPTION_PENDING, self::OPTION_DB, self::OPTION_KEYS, self::OPTION_KEY_ATTEMPT, self::OPTION_KEY_LOCK, self::OPTION_LAST_REQUEST, self::OPTION_APPS, self::OPTION_BLOCKED . Apps::CHATGPT, self::OPTION_BLOCKED . Apps::CLAUDE, self::OPTION_BLOCKED . Apps::MANUAL, self::OPTION_REVOKED_APPS, self::OPTION_ENDED, self::OPTION_STATUS_NUDGE );
+	const OPTION_PAIRING_LOCK = 'flitagent_gateway_pairing_lock';
+	const OPTIONS             = array( self::OPTION_CONNECTION, self::OPTION_PENDING, self::OPTION_DB, self::OPTION_KEYS, self::OPTION_KEY_ATTEMPT, self::OPTION_KEY_LOCK, self::OPTION_LAST_REQUEST, self::OPTION_APPS, self::OPTION_BLOCKED . Apps::CHATGPT, self::OPTION_BLOCKED . Apps::CLAUDE, self::OPTION_BLOCKED . Apps::MANUAL, self::OPTION_REVOKED_APPS, self::OPTION_ENDED, self::OPTION_STATUS_NUDGE, self::OPTION_PAIRING_LOCK );
 
 	/**
 	 * Seconds a key refresh lock is held before another request may take it over.
 	 */
 	const KEY_LOCK_TTL = 30;
+
+	/**
+	 * Seconds a pairing lock is held before another request may take it over.
+	 */
+	const PAIRING_LOCK_TTL = 60;
 
 	/**
 	 * Read-and-swap attempts save_keys() makes before giving up.
@@ -72,6 +80,13 @@ final class WpStore implements Store {
 	private $lock = 0;
 
 	/**
+	 * The pairing lock's row value this store wrote (expiry and token), '' when it holds none.
+	 *
+	 * @var string
+	 */
+	private $pairing_lock = '';
+
+	/**
 	 * {@inheritDoc}
 	 */
 	public function connection(): ?Connection {
@@ -86,6 +101,57 @@ final class WpStore implements Store {
 	public function save_connection( Connection $connection ): void {
 		update_option( self::OPTION_CONNECTION, $connection->to_array(), false );
 		delete_option( self::OPTION_ENDED );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * One INSERT IGNORE on the option row, past the object cache, like the pairing lock. A row that holds no connection
+	 * (connection() reads it as none: an older format or a corrupt value) is deleted by its exact value and the insert
+	 * tried once more, so it cannot block connecting.
+	 *
+	 * @param Connection $connection Connection.
+	 */
+	public function add_connection( Connection $connection ): bool {
+		global $wpdb;
+		$value = maybe_serialize( $connection->to_array() );
+		$added = self::insert_option( self::OPTION_CONNECTION, $value );
+		if ( ! $added ) {
+			$raw = self::raw_option( self::OPTION_CONNECTION );
+			if ( null !== $raw && null === Connection::from_array( maybe_unserialize( $raw ) ) ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- deletes only the unreadable value read just now; uncached below.
+				$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s", self::OPTION_CONNECTION, $raw ) );
+				$added = self::insert_option( self::OPTION_CONNECTION, $value );
+			}
+		}
+		self::uncache_option( self::OPTION_CONNECTION );
+		if ( $added ) {
+			delete_option( self::OPTION_ENDED );
+		}
+		return $added;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function stored_connection(): ?Connection {
+		$raw = self::raw_option( self::OPTION_CONNECTION );
+		return null === $raw ? null : Connection::from_array( maybe_unserialize( $raw ) );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * A delete of the row's exact value (what add_connection() inserted), past the object cache, then cleaned from it.
+	 *
+	 * @param Connection $connection Connection.
+	 */
+	public function remove_connection( Connection $connection ): bool {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- deletes only this exact connection; uncached below.
+		$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s", self::OPTION_CONNECTION, maybe_serialize( $connection->to_array() ) ) );
+		self::uncache_option( self::OPTION_CONNECTION );
+		return is_int( $deleted ) && $deleted > 0;
 	}
 
 	/**
@@ -357,6 +423,90 @@ final class WpStore implements Store {
 			delete_option( self::OPTION_KEY_LOCK );
 		}
 		$this->lock = 0;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * The lock is the option row `<expiry>:<token>` (32 hex), taken by one INSERT IGNORE on the options table: the
+	 * unique option name makes the insert fail while the row exists, on MySQL and on the SQLite integration (which runs
+	 * it as INSERT OR IGNORE and reports the rows it changed). Not add_option(): it upserts when its cached read misses.
+	 * A stale row (past its expiry, unreadable, or expiring more than PAIRING_LOCK_TTL + CLOCK_SKEW seconds ahead, so a
+	 * lock written under a clock that ran fast cannot block connecting) is deleted by its exact value, so a lock another
+	 * request took since stays, and the insert is tried once more.
+	 *
+	 * @param int $now Current time.
+	 */
+	public function lock_pairing( int $now ): bool {
+		global $wpdb;
+		$value = ( $now + self::PAIRING_LOCK_TTL ) . ':' . bin2hex( random_bytes( 16 ) );
+		if ( ! self::insert_option( self::OPTION_PAIRING_LOCK, $value ) ) {
+			$raw = self::raw_option( self::OPTION_PAIRING_LOCK );
+			if ( null !== $raw && self::pairing_lock_expiry( $raw ) >= $now && self::pairing_lock_expiry( $raw ) <= $now + self::PAIRING_LOCK_TTL + self::CLOCK_SKEW ) {
+				return false;
+			}
+			if ( null !== $raw ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- deletes only the stale value read just now; uncached below.
+				$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s", self::OPTION_PAIRING_LOCK, $raw ) );
+			}
+			if ( ! self::insert_option( self::OPTION_PAIRING_LOCK, $value ) ) {
+				// Another request took the stale lock over first.
+				return false;
+			}
+		}
+		self::uncache_option( self::OPTION_PAIRING_LOCK );
+		$this->pairing_lock = $value;
+		return true;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * Read from the row, never through get_option() or the object cache; the expiry is checked against this server's
+	 * clock, since a lock past it may be taken over at any moment.
+	 */
+	public function holds_pairing_lock(): bool {
+		return '' !== $this->pairing_lock
+			&& self::raw_option( self::OPTION_PAIRING_LOCK ) === $this->pairing_lock
+			&& self::pairing_lock_expiry( $this->pairing_lock ) >= time();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * Deletes the row only while it still holds this store's value.
+	 */
+	public function unlock_pairing(): void {
+		global $wpdb;
+		if ( '' !== $this->pairing_lock ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- deletes only this store's own lock; uncached below.
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s", self::OPTION_PAIRING_LOCK, $this->pairing_lock ) );
+			self::uncache_option( self::OPTION_PAIRING_LOCK );
+		}
+		$this->pairing_lock = '';
+	}
+
+	/**
+	 * Inserts an option row (not autoloaded) unless one with that name exists, past the object cache.
+	 *
+	 * @param string $name  Option name.
+	 * @param string $value Row value.
+	 * @return bool Whether this call inserted it.
+	 */
+	private static function insert_option( string $name, string $value ): bool {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- atomic insert; the caller uncaches.
+		$inserted = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, $value ) );
+		return is_int( $inserted ) && $inserted > 0;
+	}
+
+	/**
+	 * The expiry of a stored pairing lock, 0 when the value is not one (so it counts as stale).
+	 *
+	 * @param string $raw Row value.
+	 */
+	private static function pairing_lock_expiry( string $raw ): int {
+		return 1 === preg_match( '/^([0-9]{1,19}):[0-9a-f]{32}$/', $raw, $match ) ? (int) $match[1] : 0;
 	}
 
 	/**

@@ -1,0 +1,414 @@
+// Core markup inside .flitagent-wrap takes the Flit look (the wp-admin rule): headings, links, code, buttons, inputs,
+// form tables and list tables. Selectors start with the wrapper so they outrank core's `.wp-core-ui .button` and
+// friends without !important, and never reach WordPress's own chrome.
+@use "icons";
+
+.flitagent-wrap {
+
+	h2,
+	h3,
+	h4 {
+		color: var(--flit-color-fg);
+		font-family: var(--flit-font-display);
+		font-weight: var(--flit-font-weight-medium);
+		letter-spacing: -0.02em;
+	}
+
+	h2 {
+		margin: var(--flit-space-6) 0 var(--flit-space-3);
+		font-size: var(--flit-font-size-xl);
+		line-height: var(--flit-line-height-xl);
+	}
+
+	h3 {
+		margin: var(--flit-space-5) 0 var(--flit-space-2);
+		font-size: var(--flit-font-size-lg);
+		line-height: var(--flit-line-height-lg);
+	}
+
+	h4 {
+		margin: var(--flit-space-4) 0 var(--flit-space-2);
+		font-size: var(--flit-font-size-md);
+		line-height: var(--flit-line-height-md);
+	}
+
+	p,
+	li {
+		font-size: var(--flit-font-size-base);
+		line-height: var(--flit-line-height-base);
+	}
+
+	a {
+		color: var(--flit-color-link);
+		text-underline-offset: 0.15em;
+
+		&:hover {
+			color: var(--flit-color-accent-hover);
+		}
+
+		&:focus {
+			box-shadow: none;
+		}
+	}
+
+	.description {
+		color: var(--flit-color-fg-muted);
+		font-size: var(--flit-font-size-sm);
+		font-style: normal;
+	}
+
+	// Code: inline mono on the sunken surface; blocks wrap.
+	code {
+		padding: 0 var(--flit-space-1);
+		border-radius: var(--flit-radius-sm);
+		background: var(--flit-color-surface-sunken);
+		color: var(--flit-color-fg);
+		font-family: var(--flit-font-mono);
+		font-size: var(--flit-font-mono-scale);
+		overflow-wrap: anywhere;
+	}
+
+	pre {
+		margin: 0 0 var(--flit-space-4);
+		padding: var(--flit-space-3);
+		overflow-wrap: anywhere;
+		white-space: pre-wrap;
+		border-radius: var(--flit-radius-md);
+		background: var(--flit-color-surface-sunken);
+		color: var(--flit-color-fg);
+		font-family: var(--flit-font-mono);
+		font-size: var(--flit-font-size-sm);
+		line-height: var(--flit-line-height-sm);
+	}
+
+	details {
+		margin: 0 0 var(--flit-space-4);
+	}
+
+	summary {
+		min-height: 24px;
+		cursor: pointer;
+		color: var(--flit-color-link);
+	}
+
+	// Buttons: pills. Secondary (core's .button) is outlined; primary is teal with paper text. 44px high, 36px in tables.
+	.button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--flit-space-2);
+		min-height: 44px;
+		margin: 0;
+		padding: 0 var(--flit-space-5);
+		border: var(--flit-border-width-hairline) solid var(--flit-color-border-strong);
+		border-radius: var(--flit-radius-full);
+		background: transparent;
+		box-shadow: none;
+		color: var(--flit-color-fg);
+		font-family: var(--flit-font-sans);
+		font-size: var(--flit-font-size-base);
+		font-weight: var(--flit-font-weight-medium);
+		line-height: var(--flit-line-height-base);
+		text-decoration: none;
+		transition: background-color var(--flit-duration-fast) var(--flit-ease-out);
+
+		&:hover,
+		&:active {
+			border-color: var(--flit-color-border-strong);
+			background: var(--flit-color-surface-hover);
+			color: var(--flit-color-fg);
+		}
+
+		&:focus {
+			border-color: var(--flit-color-border-strong);
+			box-shadow: none;
+			color: var(--flit-color-fg);
+		}
+
+		&:disabled,
+		&[aria-disabled="true"] {
+			opacity: 0.6;
+		}
+	}
+
+	.button-primary {
+		border-color: var(--flit-color-accent);
+		background: var(--flit-color-accent);
+		color: var(--flit-color-accent-fg);
+
+		&:hover,
+		&:active,
+		&:focus {
+			border-color: var(--flit-color-accent-hover);
+			background: var(--flit-color-accent-hover);
+			color: var(--flit-color-accent-fg);
+		}
+	}
+
+	// Destructive (Disconnect): an outlined pill in danger, named by its label (A8).
+	.button.button-link-delete {
+		border-color: var(--flit-color-danger-fg);
+		background: transparent;
+		color: var(--flit-color-danger-fg);
+
+		&:hover,
+		&:focus {
+			border-color: var(--flit-color-danger-fg);
+			background: var(--flit-color-danger-bg);
+			color: var(--flit-color-danger-fg);
+		}
+	}
+
+	.button-link {
+		min-height: 24px;
+		color: var(--flit-color-link);
+		font-size: var(--flit-font-size-sm);
+		text-decoration: underline;
+		text-underline-offset: 0.15em;
+
+		&:hover {
+			color: var(--flit-color-accent-hover);
+		}
+
+		&:focus {
+			box-shadow: none;
+		}
+	}
+
+	table .button {
+		min-height: 36px;
+		font-size: var(--flit-font-size-sm);
+	}
+
+	// Inputs: pills, 44px high, `border-strong` border; read-only fields on the sunken surface.
+	input[type="text"],
+	input[type="number"],
+	input[type="url"],
+	input[type="email"],
+	input[type="search"],
+	select {
+		min-height: 44px;
+		padding: 0 var(--flit-space-5);
+		border: var(--flit-border-width-hairline) solid var(--flit-color-border-strong);
+		border-radius: var(--flit-radius-full);
+		background-color: var(--flit-color-surface);
+		box-shadow: none;
+		color: var(--flit-color-fg);
+		font-family: var(--flit-font-sans);
+		font-size: var(--flit-font-size-base);
+		line-height: var(--flit-line-height-base);
+
+		&:hover:not(:disabled) {
+			border-color: var(--flit-color-fg-muted);
+		}
+
+		&:focus {
+			border-color: var(--flit-color-border-strong);
+			box-shadow: none;
+		}
+
+		&:disabled {
+			opacity: 0.6;
+		}
+	}
+
+	select {
+		padding-right: var(--flit-space-10);
+		background-position: right var(--flit-space-4) top 55%;
+	}
+
+	input[readonly] {
+		background-color: var(--flit-color-surface-sunken);
+	}
+
+	input.code {
+		font-family: var(--flit-font-mono);
+		font-size: var(--flit-font-size-sm);
+	}
+
+	input.small-text {
+		width: 6.5em;
+		padding: 0 var(--flit-space-3) 0 var(--flit-space-5);
+	}
+
+	// Checkboxes and radios: core's control, with Flit borders and a teal tick or dot instead of the admin colour scheme's.
+	// Never squeezed by a flex label beside long text: below 783px core makes them 25px, and a shrunk radio became a 16px
+	// oval whose dot had no room.
+	input[type="checkbox"],
+	input[type="radio"] {
+		flex: none;
+		border-color: var(--flit-color-border-strong);
+		box-shadow: none;
+
+		&:focus {
+			border-color: var(--flit-color-border-strong);
+			box-shadow: none;
+		}
+	}
+
+	input[type="checkbox"]:checked {
+		border-color: var(--flit-color-accent);
+		background: var(--flit-color-accent);
+
+		&::before {
+			content: "";
+			display: block;
+			width: 100%;
+			height: 100%;
+			margin: 0;
+			background: var(--flit-color-accent-fg);
+			mask: icons.$check center / 80% no-repeat;
+		}
+	}
+
+	// A chosen radio is a teal ring round a teal dot on paper, as the canvas draws it (core fills it with the admin
+	// colour scheme and puts a white dot in it). The dot is centred by the grid, not by core's margins, which differ by
+	// width and left it no room on phones.
+	input[type="radio"]:checked {
+		display: inline-grid;
+		place-content: center;
+		border-color: var(--flit-color-accent);
+		background: var(--flit-color-surface);
+
+		&::before {
+			flex: none;
+			width: 10px;
+			height: 10px;
+			margin: 0;
+			background-color: var(--flit-color-accent);
+		}
+	}
+
+	label {
+		color: var(--flit-color-fg);
+	}
+
+	// Form tables: label above the field (the input component), one field per row.
+	.form-table {
+		margin: 0;
+
+		&,
+		tbody,
+		tr,
+		th,
+		td {
+			display: block;
+			width: auto;
+		}
+
+		tr + tr {
+			margin-top: var(--flit-space-5);
+			padding-top: var(--flit-space-5);
+			border-top: var(--flit-border-width-hairline) solid var(--flit-color-border);
+		}
+
+		th {
+			margin: 0 0 var(--flit-space-2);
+			padding: 0;
+			color: var(--flit-color-fg);
+			font-weight: var(--flit-font-weight-semibold);
+		}
+
+		td {
+			margin: 0;
+			padding: 0;
+			overflow-wrap: anywhere;
+
+			label {
+				display: inline-block;
+				min-height: 24px;
+				margin: 0 0 var(--flit-space-1);
+			}
+		}
+
+		fieldset {
+			font-size: var(--flit-font-size-base);
+		}
+
+		.description {
+			margin: var(--flit-space-2) 0 0;
+		}
+	}
+
+	p.submit {
+		margin: var(--flit-space-6) 0 0;
+		padding: 0;
+	}
+
+	// Tables: paper, header on the sunken surface, `sm` cells, 12px rows, hairline dividers, tabular numbers, no zebra.
+	.flitagent-table {
+		border: var(--flit-border-width-hairline) solid var(--flit-color-border);
+		border-radius: var(--flit-radius-lg);
+		border-collapse: separate;
+		border-spacing: 0;
+		overflow: hidden;
+		background: var(--flit-color-surface);
+		box-shadow: none;
+		color: var(--flit-color-fg);
+		font-size: var(--flit-font-size-sm);
+		font-variant-numeric: tabular-nums;
+		line-height: var(--flit-line-height-sm);
+
+		thead th,
+		thead td {
+			padding: var(--flit-space-3);
+			border-bottom: var(--flit-border-width-hairline) solid var(--flit-color-border);
+			background: var(--flit-color-surface-sunken);
+			color: var(--flit-color-fg-muted);
+			font-size: var(--flit-font-size-sm);
+			font-weight: var(--flit-font-weight-medium);
+		}
+
+		tbody tr,
+		tbody tr:nth-child(odd) {
+			background: var(--flit-color-surface);
+		}
+
+		tbody tr:hover {
+			background: var(--flit-color-surface-hover);
+		}
+
+		tbody th,
+		tbody td {
+			padding: var(--flit-space-3);
+			border-bottom: var(--flit-border-width-hairline) solid var(--flit-color-border);
+			color: var(--flit-color-fg);
+			font-size: var(--flit-font-size-sm);
+			line-height: var(--flit-line-height-sm);
+			vertical-align: top;
+			overflow-wrap: anywhere;
+		}
+
+		tbody tr:last-child th,
+		tbody tr:last-child td {
+			border-bottom: 0;
+		}
+
+		code {
+			overflow-wrap: anywhere;
+		}
+
+		// Core's narrow-screen toggle stays; its glyph takes the ink colour.
+		.toggle-row::before {
+			color: var(--flit-color-fg-muted);
+		}
+
+		// Core's narrow-screen rules expect a checkbox column first and give full width from the third cell on; these
+		// tables have none, so the second cell gets full width too.
+		@media screen and (max-width: 782px) {
+
+			tr td:nth-child(2) {
+				flex: 0 1 100%;
+			}
+
+			// Core keeps this room on the right for its absolutely positioned disclosure button.
+			tbody th.column-primary {
+				padding-right: 50px;
+			}
+
+			tbody td::before {
+				color: var(--flit-color-fg-muted);
+			}
+		}
+	}
+}

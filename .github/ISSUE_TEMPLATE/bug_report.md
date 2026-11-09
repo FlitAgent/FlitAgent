@@ -22,7 +22,7 @@ What you expected to happen.
 
 **Actual behaviour**
 
-What happened instead. The results of Test connection (FlitAgent > Settings) help.
+What happened instead. Receipt details from FlitAgent > Activity help.
 
 **Environment**
 

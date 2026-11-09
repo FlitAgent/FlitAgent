@@ -10,7 +10,7 @@ namespace FlitAgent\Tools;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * One provider per package of read tools. A package adds its provider class to Registry::PROVIDERS and nothing else.
+ * One provider per package of tools. A package adds its provider class to Registry::PROVIDERS and nothing else.
  */
 interface Provider {
 
@@ -20,4 +20,11 @@ interface Provider {
 	 * @return \FlitAgent\Mcp\Tool[]
 	 */
 	public function reads(): array;
+
+	/**
+	 * Write tools. They are served only through FlitAgent\Writes\Gateway, and only while writes are on.
+	 *
+	 * @return \FlitAgent\Writes\WriteTool[]
+	 */
+	public function writes(): array;
 }

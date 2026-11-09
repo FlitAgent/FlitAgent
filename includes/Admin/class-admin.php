@@ -8,11 +8,17 @@
 namespace FlitAgent\Admin;
 
 use FlitAgent\Auth\Gateway\WpStore as GatewayStore;
+use FlitAgent\Writes\Store;
+use FlitAgent\Writes\Wp\Factory;
+use FlitAgent\Writes\Wp\Tables;
+use FlitAgent\Writes\Wp\WpClock;
+use FlitAgent\Writes\Wp\WpPolicy;
+use FlitAgent\Writes\Wp\WpStore;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Registers the FlitAgent menu (Connect, Settings; `manage_options`), the hidden setup guide, its one-time
+ * Registers the FlitAgent menu (Approvals, Activity, Settings; `manage_options`), the hidden setup guide, its one-time
  * redirect and the admin-post handlers.
  */
 final class Admin {
@@ -23,18 +29,15 @@ final class Admin {
 	const CAPABILITY = 'manage_options';
 
 	/**
-	 * Style and script handle of the FlitAgent screens (assets/css/admin.css, assets/js/admin.js), as in 1.0.0.
+	 * Style and script handle of the FlitAgent screens (build/admin.css, build/admin.js, compiled from src/).
 	 */
 	const STYLE = 'flitagent-admin';
 
-	/**
-	 * Menu slugs of version 1.0.0's Approvals and Activity screens, which redirect to Connect.
-	 */
-	const LEGACY_SLUGS = array( 'flitagent-approvals', 'flitagent-activity' );
+
 
 	/**
 	 * Hook suffixes of the FlitAgent screens, as add_menu_page() and add_submenu_page() returned them (a submenu's
-	 * suffix starts with the sanitized parent menu title).
+	 * suffix starts with the sanitized menu title, which includes the pending-count badge).
 	 *
 	 * @var array<int, string>
 	 */
@@ -44,20 +47,30 @@ final class Admin {
 	 * Hooks.
 	 */
 	public static function register(): void {
+		add_action( 'admin_init', array( Tables::class, 'maybe_upgrade' ) );
 		add_action( 'admin_menu', array( self::class, 'menu' ) );
 		add_action( 'admin_enqueue_scripts', array( self::class, 'enqueue' ) );
+		add_action( 'admin_post_flitagent_decide', array( self::class, 'decide' ) );
 		add_action( 'admin_post_flitagent_settings', array( self::class, 'save_settings' ) );
 		add_action( 'admin_init', array( self::class, 'onboarding_redirect' ) );
-		// Fires just before wp-admin refuses an unregistered page; admin_init comes too late for the old slugs.
-		add_action( 'admin_page_access_denied', array( self::class, 'legacy_redirect' ) );
+		// Fires just before wp-admin refuses an unregistered page; admin_init never runs for one.
+		add_action( 'admin_page_access_denied', array( self::class, 'change_link' ) );
 		add_action( 'admin_post_' . Onboarding::ACTION, array( self::class, 'save_onboarding' ) );
 		add_filter( 'plugin_action_links_' . plugin_basename( FLITAGENT_FILE ), array( self::class, 'action_links' ) );
 	}
 
 	/**
-	 * Adds the menu: FlitAgent (the Connect screen) with Connect and Settings, and the hidden setup guide.
+	 * Adds the menu, with a count of pending changes while writes are on (only for users who can open Approvals).
 	 */
 	public static function menu(): void {
+		$title = __( 'FlitAgent', 'flitagent' );
+		if ( current_user_can( self::CAPABILITY ) && ( new WpPolicy() )->writes_enabled() ) {
+			$pending = Screens::waiting( new WpStore(), ( new WpClock() )->now() );
+			if ( $pending > 0 ) {
+				$title .= ' <span class="awaiting-mod">' . esc_html( number_format_i18n( $pending ) ) . '</span>';
+			}
+		}
+
 		// No parent and no menu title: reachable at admin.php?page=flitagent-onboarding, not in the menu.
 		$guide = add_submenu_page( '', __( 'Set up FlitAgent', 'flitagent' ), '', self::CAPABILITY, Onboarding::SLUG, array( self::class, 'onboarding' ) );
 		if ( is_string( $guide ) ) {
@@ -67,9 +80,11 @@ final class Admin {
 		self::$hooks = array_values(
 			array_filter(
 				array(
-					add_menu_page( __( 'Connect to flitagent.com', 'flitagent' ), __( 'FlitAgent', 'flitagent' ), self::CAPABILITY, ConnectScreen::SLUG, array( self::class, 'connect' ), 'dashicons-shield', 81 ),
-					add_submenu_page( ConnectScreen::SLUG, __( 'Connect to flitagent.com', 'flitagent' ), __( 'Connect', 'flitagent' ), self::CAPABILITY, ConnectScreen::SLUG, array( self::class, 'connect' ) ),
-					add_submenu_page( ConnectScreen::SLUG, __( 'FlitAgent settings', 'flitagent' ), __( 'Settings', 'flitagent' ), self::CAPABILITY, Settings::SLUG, array( self::class, 'settings' ) ),
+					add_menu_page( __( 'FlitAgent approvals', 'flitagent' ), $title, self::CAPABILITY, 'flitagent-approvals', array( self::class, 'approvals' ), 'dashicons-shield', 81 ),
+					add_submenu_page( 'flitagent-approvals', __( 'FlitAgent approvals', 'flitagent' ), __( 'Approvals', 'flitagent' ), self::CAPABILITY, 'flitagent-approvals', array( self::class, 'approvals' ) ),
+					add_submenu_page( 'flitagent-approvals', __( 'Connect to flitagent.com', 'flitagent' ), __( 'Connect', 'flitagent' ), self::CAPABILITY, ConnectScreen::SLUG, array( self::class, 'connect' ) ),
+					add_submenu_page( 'flitagent-approvals', __( 'FlitAgent activity', 'flitagent' ), __( 'Activity', 'flitagent' ), self::CAPABILITY, 'flitagent-activity', array( self::class, 'activity' ) ),
+					add_submenu_page( 'flitagent-approvals', __( 'FlitAgent settings', 'flitagent' ), __( 'Settings', 'flitagent' ), self::CAPABILITY, 'flitagent-settings', array( self::class, 'settings' ) ),
 					$guide,
 				),
 				'is_string'
@@ -104,7 +119,7 @@ final class Admin {
 	 * @return string
 	 */
 	public static function onboarding_parent_file(): string {
-		return ConnectScreen::SLUG;
+		return 'flitagent-approvals';
 	}
 
 	/**
@@ -117,9 +132,7 @@ final class Admin {
 	}
 
 	/**
-	 * Adds the admin scripts and styles (see Assets) on FlitAgent's screens only, versioned with the plugin: the tokens,
-	 * then admin.css; the five scripts, then admin.js, which attaches them; all scripts in the footer. Runs on
-	 * `admin_enqueue_scripts`.
+	 * Adds the compiled admin script and styles (see Assets) on FlitAgent's screens only. Runs on `admin_enqueue_scripts`.
 	 *
 	 * @param string $hook_suffix Hook suffix of the current admin page.
 	 */
@@ -127,14 +140,18 @@ final class Admin {
 		if ( ! is_string( $hook_suffix ) || '' === $hook_suffix || ! in_array( $hook_suffix, self::$hooks, true ) ) {
 			return;
 		}
-		wp_register_style( Assets::TOKENS, Assets::url( 'css/tokens.css' ), array(), FLITAGENT_VERSION );
-		wp_register_style( self::STYLE, Assets::url( 'css/admin.css' ), array( Assets::TOKENS ), FLITAGENT_VERSION );
+		$asset = Assets::meta( 'admin' );
+		wp_register_style( self::STYLE, Assets::url( 'admin.css' ), array(), $asset['version'] );
 		wp_enqueue_style( self::STYLE );
-		foreach ( Assets::SCRIPTS as $handle => $file ) {
-			wp_register_script( $handle, Assets::url( $file ), array(), FLITAGENT_VERSION, true );
-		}
-		wp_register_script( self::STYLE, Assets::url( 'js/admin.js' ), array_keys( Assets::SCRIPTS ), FLITAGENT_VERSION, true );
+		wp_register_script( self::STYLE, Assets::url( 'admin.js' ), $asset['dependencies'], $asset['version'], true );
 		wp_enqueue_script( self::STYLE );
+	}
+
+	/**
+	 * Approvals screen.
+	 */
+	public static function approvals(): void {
+		echo wp_kses( self::screens()->approvals( Request::query( array( 'change' ) ) ), Ui::allowed_html() );
 	}
 
 	/**
@@ -157,6 +174,7 @@ final class Admin {
 	public static function onboarding_redirect(): void {
 		$url = self::onboarding_redirect_url();
 		if ( null !== $url ) {
+			add_filter( 'allowed_redirect_hosts', array( self::class, 'allow_admin_host' ) );
 			wp_safe_redirect( $url );
 			exit;
 		}
@@ -169,6 +187,52 @@ final class Admin {
 	 */
 	public static function onboarding_redirect_url(): ?string {
 		return Onboarding::redirect_target();
+	}
+
+	/**
+	 * Sends the link an AI app was given for a change (WpPolicy::approve_url()) on to that change. Runs on
+	 * `admin_page_access_denied`. The link carries no nonce, so this reads core's `$plugin_page` and never the request.
+	 */
+	public static function change_link(): void {
+		global $plugin_page;
+		$url = self::change_link_url( $plugin_page, new WpStore() );
+		if ( null !== $url ) {
+			add_filter( 'allowed_redirect_hosts', array( self::class, 'allow_admin_host' ) );
+			wp_safe_redirect( $url );
+			exit;
+		}
+	}
+
+	/**
+	 * Where a change's link goes: the change, with a nonce made for this session, or the Approvals list for a change the
+	 * site does not have. Null, so core refuses as usual, for any other page name and for a user who cannot open Approvals,
+	 * whether or not the change exists.
+	 *
+	 * @param mixed $page  The page asked for (core's `$plugin_page`).
+	 * @param Store $store Store.
+	 * @return string|null
+	 */
+	public static function change_link_url( $page, Store $store ): ?string {
+		if ( ! is_string( $page ) || 1 !== preg_match( '/^' . preg_quote( WpPolicy::CHANGE_PAGE, '/' ) . '([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/D', $page, $match ) ) {
+			return null;
+		}
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			return null;
+		}
+		return null === $store->change( $match[1] ) ? admin_url( 'admin.php?page=flitagent-approvals' ) : Screens::change_url( $match[1] );
+	}
+
+	/**
+	 * `allowed_redirect_hosts` for the handlers: adds this site's admin host (siteurl's), so they still reach their screen
+	 * when siteurl and home are on different hosts (core allows only the home host, and sends anything else to the Dashboard).
+	 *
+	 * @param mixed $hosts Allowed hosts.
+	 * @return array
+	 */
+	public static function allow_admin_host( $hosts ): array {
+		$hosts = is_array( $hosts ) ? $hosts : array();
+		$host  = wp_parse_url( admin_url(), PHP_URL_HOST );
+		return is_string( $host ) && '' !== $host ? array_merge( $hosts, array( $host ) ) : $hosts;
 	}
 
 	/**
@@ -185,6 +249,13 @@ final class Admin {
 	}
 
 	/**
+	 * Activity screen.
+	 */
+	public static function activity(): void {
+		echo wp_kses( self::screens()->activity( Request::query( array( 'tool', 'status', 'paged' ) ) ), Ui::allowed_html() );
+	}
+
+	/**
 	 * Settings screen.
 	 */
 	public static function settings(): void {
@@ -193,43 +264,25 @@ final class Admin {
 			// This screen's only POST form failed its nonce: the check below answers that the link expired.
 			$post = array( DiagnosticsScreen::ACTION => '1' );
 		}
-		echo wp_kses( Settings::html( DiagnosticsScreen::render( $post ) ), Ui::allowed_html() );
+		$connection = ( new GatewayStore() )->connection();
+		echo wp_kses( self::screens()->settings( DiagnosticsScreen::render( $post ), null === $connection ? '' : $connection->scope() ), Ui::allowed_html() );
 	}
 
 	/**
-	 * Sends a request for a screen of version 1.0.0 that no longer exists (Approvals, Activity) to Connect, so a bookmark
-	 * does not end on "Sorry, you are not allowed to access this page". Runs on `admin_page_access_denied`, just before core's
-	 * error.
+	 * Handles admin-post.php: approve or reject.
 	 */
-	public static function legacy_redirect(): void {
-		global $plugin_page;
-		// Core's own reading of `page`: an old bookmark carries no nonce, so this never reads the request itself.
-		$url = self::legacy_redirect_url( array( 'page' => $plugin_page ) );
-		if ( null !== $url ) {
-			wp_safe_redirect( $url );
-			exit;
-		}
-	}
-
-	/**
-	 * Where to send a request for an old screen, or null for any other request.
-	 *
-	 * @param array<string, mixed> $query The page asked for, as `page`.
-	 * @return string|null
-	 */
-	public static function legacy_redirect_url( array $query ): ?string {
-		$page = $query['page'] ?? null;
-		if ( ! is_string( $page ) || ! in_array( $page, self::LEGACY_SLUGS, true ) || ! current_user_can( self::CAPABILITY ) ) {
-			return null;
-		}
-		return admin_url( 'admin.php?page=' . ConnectScreen::SLUG );
+	public static function decide(): void {
+		add_filter( 'allowed_redirect_hosts', array( self::class, 'allow_admin_host' ) );
+		wp_safe_redirect( ( new Actions( Factory::gateway() ) )->decide( self::decide_fields() ) );
+		exit;
 	}
 
 	/**
 	 * Handles admin-post.php: save settings.
 	 */
 	public static function save_settings(): void {
-		wp_safe_redirect( ( new Actions() )->save_settings( Request::post( array( '_wpnonce', Settings::OPTION_REMOVE_DATA ), 'flitagent_settings' ) ) );
+		add_filter( 'allowed_redirect_hosts', array( self::class, 'allow_admin_host' ) );
+		wp_safe_redirect( ( new Actions( Factory::gateway() ) )->save_settings( self::settings_fields() ) );
 		exit;
 	}
 
@@ -237,7 +290,53 @@ final class Admin {
 	 * Handles admin-post.php: the setup guide's forms.
 	 */
 	public static function save_onboarding(): void {
-		wp_safe_redirect( ( new Actions() )->onboarding( Request::post( array( '_wpnonce', 'do' ), Onboarding::ACTION ) ) );
+		add_filter( 'allowed_redirect_hosts', array( self::class, 'allow_admin_host' ) );
+		wp_safe_redirect( ( new Actions( Factory::gateway() ) )->onboarding( self::onboarding_fields() ) );
 		exit;
+	}
+
+	/**
+	 * The approve or reject form's fields. Its nonce names no change, so it can be checked before the change is read;
+	 * Actions::decide() then checks the second nonce, which is bound to that change.
+	 *
+	 * @return array<string, mixed> Sanitized POST fields.
+	 */
+	public static function decide_fields(): array {
+		$post = Request::post( array( '_wpnonce', Actions::CHANGE_NONCE, 'change', 'decision', 'plan_items' ), Actions::DECIDE );
+		if ( isset( $post['plan_items'] ) ) {
+			$post['items'] = Request::post_list( 'items', Actions::DECIDE );
+		}
+		return $post;
+	}
+
+	/**
+	 * The settings form's fields.
+	 *
+	 * @return array<string, mixed> Sanitized POST fields.
+	 */
+	public static function settings_fields(): array {
+		$post = Request::post( array( '_wpnonce', WpPolicy::OPTION_ENABLED, WpPolicy::OPTION_TTL, WpPolicy::OPTION_REMOVE_DATA ), Actions::SETTINGS );
+		if ( array() !== $post ) {
+			$post[ WpPolicy::OPTION_AUTO ] = Request::post_list( WpPolicy::OPTION_AUTO, Actions::SETTINGS );
+		}
+		return $post;
+	}
+
+	/**
+	 * The setup guide's form fields.
+	 *
+	 * @return array<string, string> Sanitized POST fields.
+	 */
+	public static function onboarding_fields(): array {
+		return Request::post( array( '_wpnonce', 'do', 'mode' ), Onboarding::ACTION );
+	}
+
+	/**
+	 * Screens for this request.
+	 *
+	 * @return Screens
+	 */
+	private static function screens(): Screens {
+		return new Screens( Factory::gateway(), new WpStore(), new WpClock() );
 	}
 }
