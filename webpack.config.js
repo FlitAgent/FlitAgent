@@ -36,7 +36,7 @@ module.exports = {
 		// The fonts and the mark are emitted next to the CSS; URLs relative to the stylesheet.
 		publicPath: 'auto',
 	},
-	// Readable output (WordPress.org guideline 4); src/ and this config ship in the plugin beside build/ (readme.txt, Source code).
+	// Readable output (WordPress.org guideline 4); src/ and this config are in the public repo, which readme.txt links.
 	optimization: { ...defaultConfig.optimization, minimize: false },
 	plugins: [
 		...defaultConfig.plugins,
