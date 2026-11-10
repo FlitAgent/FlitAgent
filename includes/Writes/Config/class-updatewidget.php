@@ -169,19 +169,41 @@ final class UpdateWidget implements WriteTool, Reversible {
 	}
 
 	/**
-	 * Restores the previous instance, if the widget is still as assessed.
+	 * Restores the previous instance exactly, if the widget is still as assessed. It writes the snapshot into the
+	 * widget_<id_base> option itself, as WP_Widget::save_settings() does, and not through the widgets REST route: that
+	 * route runs the widget's update(), which may start from the current instance (WP_Widget_Text::update() does), so
+	 * keys the write added would survive. The snapshot is what WordPress stored before, so it needs no sanitizing again.
+	 * Like WP_Widget::save_settings(), it rewrites the whole option, read fresh just before.
 	 *
 	 * @param array<string, mixed> $rollback       Rollback reference.
 	 * @param array<string, mixed> $expected_state Preconditions of the rollback assessment.
 	 * @return Outcome
-	 * @throws ToolError When the widget changed or WordPress refused.
+	 * @throws ToolError When the widget changed or is gone.
 	 */
 	public function rollback( array $rollback, array $expected_state ): Outcome {
-		$id = (string) $rollback['target']['id'];
+		$id     = (string) $rollback['target']['id'];
+		$parsed = wp_parse_widget_id( $id );
+		$option = 'widget_' . $parsed['id_base'];
+		// Read the option fresh for the check and the write, so an edit made since this request loaded its options is
+		// seen: one to this widget stops the rollback, one to another widget of this type is kept.
+		wp_cache_delete( $option, 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
 		if ( Widgets::fingerprint( $id ) !== ( $expected_state['fingerprint'] ?? '' ) ) {
 			throw new ToolError( sprintf( 'Widget %s changed after the rollback was assessed; nothing was restored.', esc_textarea( $id ) ) );
 		}
-		Rest::write( 'PUT', '/wp/v2/widgets/' . rawurlencode( $id ), array( 'instance' => array( 'raw' => (array) Exact::unpack( $rollback['before']['instance'] ) ) ) );
-		return new Outcome( array( 'widget_id' => $id ), Rollback::none() );
+		$before    = (array) Exact::unpack( $rollback['before']['instance'] );
+		$instances = get_option( $option );
+		if ( empty( $parsed['number'] ) || ! is_array( $instances ) || ! isset( $instances[ $parsed['number'] ] ) ) {
+			throw new ToolError( sprintf( 'Widget %s no longer exists; nothing was restored.', esc_textarea( $id ) ) );
+		}
+		$instances[ $parsed['number'] ] = $before;
+		update_option( $option, $instances );
+
+		$outcome = new Outcome( array( 'widget_id' => $id ), Rollback::none() );
+		$widget  = Widgets::widget( $id );
+		if ( null === $widget || Canonical::json( Widgets::raw( $widget ) ) !== Canonical::json( $before ) ) {
+			$outcome = $outcome->with_warning( 'not_exact', sprintf( 'The settings of widget %s could not be restored exactly: WordPress stored them differently. Check the widget in Appearance > Widgets.', $id ) );
+		}
+		return $outcome;
 	}
 }

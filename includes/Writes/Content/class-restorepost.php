@@ -115,7 +115,7 @@ final class RestorePost implements WriteTool, Reversible {
 	 * @return Assessment
 	 */
 	public function assess_rollback( array $rollback ): Assessment {
-		return Trashing::assess_trash( isset( $rollback['target']['id'] ) ? (int) $rollback['target']['id'] : 0, 'Undo the restore: move back to the trash', true );
+		return Trashing::assess_trash( isset( $rollback['target']['id'] ) ? (int) $rollback['target']['id'] : 0, 'Undo the restore: move %s back to the trash', true );
 	}
 
 	/**

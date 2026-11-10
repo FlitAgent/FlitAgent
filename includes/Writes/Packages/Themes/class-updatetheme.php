@@ -64,7 +64,7 @@ final class UpdateTheme implements WriteTool, Reversible {
 		return Definition::write(
 			$this->name(),
 			'FlitAgent: update a theme from WordPress.org',
-			'Updates an installed theme to the latest version in the WordPress.org theme directory, by slug (its directory name). Always needs an administrator\'s approval (returns approval_required) with a preview of current and new version, compatibility, whether it is the active theme, theme page and backup status. Refused when the theme is not installed, not from WordPress.org, already up to date, needs a newer WordPress or PHP, or the site does not allow file changes. Updating the active theme puts the site in maintenance mode for the swap and checks the home page after (warning home_page_error). rollback_change reinstalls the previous version; data the update changed is not undone.',
+			'Updates an installed theme to the latest version in the WordPress.org theme directory, by slug (its directory name). As in wp-admin, WordPress then also installs available translation updates and checks WordPress.org for updates. Always needs an administrator\'s approval (returns approval_required) with a preview of current and new version, compatibility, whether it is the active theme, theme page and backup status. Refused when the theme is not installed, not from WordPress.org, already up to date, needs a newer WordPress or PHP, or the site does not allow file changes. Updating the active theme puts the site in maintenance mode for the swap and checks the home page after (warning home_page_error). rollback_change reinstalls the previous version; data the update changed is not undone.',
 			array( 'slug' => InstallTheme::slug_property() ),
 			array( 'slug' ),
 			$this->tiers(),

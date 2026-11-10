@@ -77,12 +77,6 @@ final class Purger {
 				}
 				\Elementor\Plugin::$instance->files_manager->clear_cache();
 				return;
-			case 'beaver_builder':
-				if ( ! is_callable( array( 'FLBuilderModel', 'delete_asset_cache_for_all_posts' ) ) ) {
-					throw new \RuntimeException( 'Beaver Builder is not loaded.' );
-				}
-				\FLBuilderModel::delete_asset_cache_for_all_posts();
-				return;
 			case 'divi':
 				if ( ! is_callable( array( 'ET_Core_PageResource', 'remove_static_resources' ) ) ) {
 					throw new \RuntimeException( 'Divi is not loaded.' );

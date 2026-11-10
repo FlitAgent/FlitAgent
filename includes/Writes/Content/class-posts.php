@@ -26,6 +26,18 @@ final class Posts {
 	const NOT_PUBLIC = array( 'draft', 'pending' );
 
 	/**
+	 * Each status as a summary says it.
+	 */
+	const STATUS_WORDS = array(
+		'draft'   => 'draft',
+		'pending' => 'pending review',
+		'publish' => 'published',
+		'private' => 'private',
+		'future'  => 'scheduled',
+		'trash'   => 'trashed',
+	);
+
+	/**
 	 * Statuses a tool may set.
 	 */
 	const STATUSES = array( 'draft', 'pending', 'publish', 'private', 'future' );
@@ -61,12 +73,16 @@ final class Posts {
 	 *
 	 * @param int    $post_id    Post ID.
 	 * @param string $capability `edit_post` or `delete_post`.
+	 * @param string $verb       What the refusal says the caller cannot do; '' for the capability's verb.
 	 * @return object|Assessment
 	 */
-	public static function find( int $post_id, string $capability ) {
+	public static function find( int $post_id, string $capability, string $verb = '' ) {
 		$post = $post_id > 0 ? get_post( $post_id ) : null;
 		if ( ! $post || 'revision' === $post->post_type || ! current_user_can( $capability, $post_id ) ) {
-			return Assessment::prohibited( 'not_found', sprintf( 'Post %d was not found or you cannot %s it.', $post_id, 'delete_post' === $capability ? 'delete' : 'edit' ) );
+			if ( '' === $verb ) {
+				$verb = 'delete_post' === $capability ? 'delete' : 'edit';
+			}
+			return Assessment::prohibited( 'not_found', sprintf( 'Post %d was not found or you cannot %s it.', $post_id, $verb ) );
 		}
 		if ( 'auto-draft' === $post->post_status ) {
 			return Assessment::prohibited( 'not_supported', sprintf( 'Post %d is an auto-draft; save it first.', $post_id ) );
@@ -128,7 +144,17 @@ final class Posts {
 		if ( $object && current_user_can( $object->cap->publish_posts ) ) {
 			return null;
 		}
-		return Assessment::prohibited( 'forbidden', sprintf( 'You cannot publish items of type %s (status %s).', $type, $status ) );
+		return Assessment::prohibited( 'forbidden', sprintf( 'You cannot publish items of type %s (status: %s).', $type, self::status_word( $status ) ) );
+	}
+
+	/**
+	 * A status in plain words: "published", not "publish".
+	 *
+	 * @param string $status Status.
+	 * @return string
+	 */
+	public static function status_word( string $status ): string {
+		return self::STATUS_WORDS[ $status ] ?? $status;
 	}
 
 	/**

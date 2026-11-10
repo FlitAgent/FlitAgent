@@ -13,6 +13,7 @@ use FlitAgent\Writes\Definition;
 use FlitAgent\Writes\Outcome;
 use FlitAgent\Writes\Risk;
 use FlitAgent\Writes\Rollback;
+use FlitAgent\Writes\Summary;
 use FlitAgent\Writes\WriteTool;
 
 defined( 'ABSPATH' ) || exit;
@@ -88,19 +89,21 @@ final class DeleteCommentPermanently implements WriteTool {
 		}
 		$status = Comments::status( $comment_id );
 		if ( ! in_array( $status, self::DELETABLE, true ) ) {
-			return Assessment::prohibited( 'not_in_trash', sprintf( 'Comment %d is %s; only comments in the trash or spam can be deleted permanently. Use moderate_comment to trash it first.', $comment_id, '' === $status ? 'in an unknown status' : $status ) );
+			return Assessment::prohibited( 'not_in_trash', sprintf( 'Comment %d is %s; only comments in the trash or spam can be deleted permanently. Use moderate_comment to trash it first.', $comment_id, '' === $status ? 'in an unknown status' : Comments::status_word( $status ) ) );
 		}
+		// wp_delete_comment() moves every reply, whatever its status: 'any' counts trashed and spam replies too ('all'
+		// is only approved and pending ones).
 		$replies = get_comments(
 			array(
 				'parent' => $comment_id,
 				'count'  => true,
-				'status' => 'all',
+				'status' => 'any',
 			)
 		);
 		$replies = is_numeric( $replies ) ? (int) $replies : 0;
 
 		return Assessment::destructive(
-			sprintf( 'Permanently delete %s comment %d by %s on post %d%s. This cannot be undone.', $status, $comment_id, $comment->comment_author, (int) $comment->comment_post_ID, 0 === $replies ? '' : sprintf( '; %d replies move to its parent', $replies ) ),
+			sprintf( 'Permanently delete %s comment %d by %s on post %d%s. This cannot be undone.', Comments::status_word( $status ), $comment_id, $comment->comment_author, (int) $comment->comment_post_ID, 0 === $replies ? '' : '; ' . Summary::count( $replies, 'reply moves', 'replies move' ) . ' to its parent' ),
 			array(
 				'comment_id'         => $comment_id,
 				'before'             => array(

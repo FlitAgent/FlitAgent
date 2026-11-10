@@ -125,7 +125,7 @@ final class DeleteWidget implements WriteTool, Reversible {
 				Rollback::SNAPSHOT,
 				'widget',
 				$id,
-				array( 'sidebar' => $place['sidebar'] ),
+				array( 'sidebar' => $place['sidebar'] ) + ThemeBound::refs(),
 				array(
 					'id_base'  => (string) $widget['id_base'],
 					'instance' => Exact::pack( Widgets::raw( $widget ) ),
@@ -155,7 +155,7 @@ final class DeleteWidget implements WriteTool, Reversible {
 	 */
 	public function assess_rollback( array $rollback ): Assessment {
 		$id      = isset( $rollback['target']['id'] ) ? (string) $rollback['target']['id'] : '';
-		$refusal = Widgets::refusal();
+		$refusal = Widgets::refusal() ?? ThemeBound::refusal( $rollback );
 		if ( null !== $refusal ) {
 			return $refusal;
 		}

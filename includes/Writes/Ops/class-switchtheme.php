@@ -8,6 +8,8 @@
 namespace FlitAgent\Writes\Ops;
 
 use FlitAgent\Mcp\ToolError;
+use FlitAgent\Writes\AdminCode;
+use FlitAgent\Writes\Buffers;
 use FlitAgent\Writes\Assessment;
 use FlitAgent\Writes\Definition;
 use FlitAgent\Writes\Outcome;
@@ -120,7 +122,7 @@ final class SwitchTheme implements WriteTool, Reversible {
 			throw new ToolError( 'The active theme changed while the switch was being applied; nothing was changed.' );
 		}
 		$widgets = WidgetForecast::placement();
-		switch_theme( (string) $args['stylesheet'] );
+		$failed  = self::switch_to( (string) $args['stylesheet'], false );
 
 		$after   = self::state();
 		$outcome = new Outcome(
@@ -128,6 +130,9 @@ final class SwitchTheme implements WriteTool, Reversible {
 			Rollback::make( Rollback::SNAPSHOT, 'theme', $before['stylesheet'], array(), $before + array( 'widgets' => $widgets ) ),
 			array( 'fingerprint' => self::fingerprint( $after ) )
 		);
+		foreach ( $failed as $code => $message ) {
+			$outcome = $outcome->with_warning( $code, $message );
+		}
 		return $after['stylesheet'] === (string) $args['stylesheet'] ? WidgetForecast::warn( $outcome, $widgets ) : $outcome;
 	}
 
@@ -157,17 +162,22 @@ final class SwitchTheme implements WriteTool, Reversible {
 		if ( $theme instanceof Assessment ) {
 			return $theme;
 		}
-		$current = self::state();
-		if ( $current['stylesheet'] === $previous ) {
+		$current  = self::state();
+		$template = (string) $theme->get_template();
+		if ( $current['stylesheet'] === $previous && $current['template'] === $template ) {
 			return Assessment::prohibited( 'already_restored', sprintf( 'Theme %s is already active; nothing to roll back.', $previous ) );
 		}
+		// A switch that stopped half way left the previous stylesheet with another theme's template.
+		$summary = $current['stylesheet'] === $previous
+			? sprintf( 'Switch the active theme back to %s, whose template is %s; the template is now %s after a switch that stopped half way.', $previous, $template, $current['template'] )
+			: sprintf( 'Switch the active theme from %s back to %s.', $current['stylesheet'], $previous );
 		return Assessment::destructive(
-			sprintf( 'Switch the active theme from %s back to %s.', $current['stylesheet'], $previous ),
+			$summary,
 			array(
 				'current'  => $current,
 				'restored' => array(
 					'stylesheet' => $previous,
-					'template'   => (string) $theme->get_template(),
+					'template'   => $template,
 				),
 			),
 			array( 'fingerprint' => self::fingerprint( $current ) )
@@ -189,13 +199,68 @@ final class SwitchTheme implements WriteTool, Reversible {
 		$previous = (string) $rollback['before']['stylesheet'];
 		$recorded = isset( $rollback['before']['widgets'] ) && is_array( $rollback['before']['widgets'] );
 		$widgets  = $recorded ? array_map( 'strval', $rollback['before']['widgets'] ) : WidgetForecast::placement();
-		switch_theme( $previous );
-		$after   = self::state();
-		$outcome = new Outcome( $after, Rollback::none() );
+		$failed   = self::switch_to( $previous, true );
+		$after    = self::state();
+		$outcome  = new Outcome( $after, Rollback::none() );
+		foreach ( $failed as $code => $message ) {
+			$outcome = $outcome->with_warning( $code, $message );
+		}
 		if ( $after['stylesheet'] !== $previous ) {
 			return $outcome->with_verification_failure( 'WordPress did not switch back to the previous theme.' );
 		}
 		return WidgetForecast::warn( $outcome, $widgets, $recorded ? ' before the switch' : '' );
+	}
+
+	/**
+	 * Switches through core with wp-admin's admin code loaded, discarding what hooks print. When something throws, the
+	 * template and stylesheet are read back: core stores the template, then the stylesheet, then runs the switch hooks.
+	 * - Both as before: not switched, a tool error.
+	 * - The new stylesheet: switched, and a hook failed after it; the warning switch_hook_failed.
+	 * - Anything else: half switched (the template stored, not the stylesheet); the warning switch_half_applied. The
+	 *   receipt keeps its rollback, which switches back to the previous theme, setting both again.
+	 *
+	 * @param string $stylesheet Theme to switch to.
+	 * @param bool   $back       Whether this switches back (a rollback).
+	 * @return array<string, string> Warnings, code => message.
+	 * @throws ToolError When the theme was not switched.
+	 */
+	private static function switch_to( string $stylesheet, bool $back ): array {
+		AdminCode::load();
+		$before = self::state();
+		$level  = ob_get_level();
+		ob_start();
+		try {
+			switch_theme( $stylesheet );
+		} catch ( \Throwable $e ) {
+			Buffers::discard( $level );
+			$reason = sprintf( '%s: %s', $e instanceof \Error ? 'a fatal error' : 'an error', rtrim( ErrorText::of( $e ), '.' ) );
+			$now    = self::state();
+			if ( $now['stylesheet'] === $stylesheet ) {
+				return array(
+					'switch_hook_failed' => $back
+						? sprintf( 'The theme was switched back to %s, but code hooked to the switch failed with %s. What that code would have set up may be missing.', $stylesheet, $reason )
+						: sprintf( 'The theme was switched to %s, but code hooked to the switch failed with %s. What that code would have set up may be missing; roll back to switch back.', $stylesheet, $reason ),
+				);
+			}
+			if ( $now === $before ) {
+				throw new ToolError( sprintf( 'Switching to the theme %s failed with %s. The theme was not switched.', esc_textarea( $stylesheet ), esc_textarea( $reason ) ) );
+			}
+			return array(
+				'switch_half_applied' => sprintf(
+					'Switching %s %s stopped half way with %s. WordPress stored its template %s but not its stylesheet, so the site now runs a mix of %s and %s. %s',
+					$back ? 'back to' : 'to',
+					$stylesheet,
+					$reason,
+					$now['template'],
+					$now['stylesheet'],
+					$now['template'],
+					$back ? sprintf( 'Switch to %s in wp-admin (Appearance, Themes) to finish.', $stylesheet ) : sprintf( 'Roll back this change to switch back to %s.', $before['stylesheet'] )
+				),
+			);
+		} finally {
+			Buffers::discard( $level );
+		}//end try
+		return array();
 	}
 
 	/**

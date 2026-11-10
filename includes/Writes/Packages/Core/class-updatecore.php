@@ -8,6 +8,8 @@
 namespace FlitAgent\Writes\Packages\Core;
 
 use FlitAgent\Mcp\ToolError;
+use FlitAgent\Writes\AdminCode;
+use FlitAgent\Writes\Buffers;
 use FlitAgent\Writes\Assessment;
 use FlitAgent\Writes\Definition;
 use FlitAgent\Writes\Ops\ErrorText;
@@ -174,12 +176,14 @@ final class UpdateCore implements WriteTool {
 
 		self::load_upgrader();
 		ignore_user_abort( true );
-		$skin = new \Automatic_Upgrader_Skin();
+		$skin  = new \Automatic_Upgrader_Skin();
+		$level = ob_get_level();
 		ob_start();
 		try {
 			$result = ( new \Core_Upgrader( $skin ) )->upgrade( $offer, array( 'attempt_rollback' => true ) );
 		} finally {
-			$output = (string) ob_get_clean();
+			// Everything printed, including into buffers the upgrader or a hook left open, which are closed.
+			$output = Buffers::discard( $level );
 		}
 
 		if ( is_wp_error( $result ) ) {
@@ -287,9 +291,7 @@ final class UpdateCore implements WriteTool {
 	 * Loads the admin code Core_Upgrader and update_core() use, when the request has not (as WP-CLI does).
 	 */
 	private static function load_upgrader(): void {
-		if ( ! function_exists( 'get_core_updates' ) && file_exists( ABSPATH . 'wp-admin/includes/admin.php' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/admin.php';
-		}
+		AdminCode::load();
 		if ( ! class_exists( 'Core_Upgrader', false ) && file_exists( ABSPATH . 'wp-admin/includes/class-wp-upgrader.php' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 		}

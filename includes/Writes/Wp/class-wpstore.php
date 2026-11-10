@@ -39,15 +39,64 @@ final class WpStore implements Store {
 	const FILTERS = array( 'status', 'tool', 'requester_user_id' );
 
 	/**
-	 * Claims an idempotency scope with INSERT IGNORE on its unique key.
+	 * Columns receipt queries may filter on besides FILTERS.
+	 */
+	const RECEIPT_FILTERS = array( 'change_id', 'idempotency_key', 'user_id', 'client_id' );
+
+	/**
+	 * Microseconds to wait before the second try at claiming a key.
+	 *
+	 * @var int
+	 */
+	private $retry_pause;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param int $retry_pause Microseconds to wait before the second try at claiming a key.
+	 */
+	public function __construct( int $retry_pause = 200000 ) {
+		$this->retry_pause = max( 0, $retry_pause );
+	}
+
+	/**
+	 * Claims an idempotency scope with INSERT IGNORE on its unique key. An insert that adds no row is a duplicate only
+	 * when the scope's row can be read back; otherwise the database was busy or failed (a lock wait, a deadlock, SQLite
+	 * contention), so the insert is tried once more after a short pause.
 	 *
 	 * @param string $scope     Scope.
 	 * @param string $args_hash Arguments hash.
 	 * @param int    $now       Unix time.
 	 * @return array<string, mixed>|null
-	 * @throws \RuntimeException When the scope can be neither claimed nor read.
+	 * @throws \RuntimeException When the scope can be neither claimed nor read, twice; nothing was stored.
 	 */
 	public function claim_key( string $scope, string $args_hash, int $now ): ?array {
+		for ( $attempt = 1; ; ++$attempt ) {
+			if ( $this->insert_key( $scope, $args_hash, $now ) ) {
+				return null;
+			}
+			$row = $this->key_row( $scope );
+			if ( null !== $row ) {
+				return $row;
+			}
+			if ( $attempt >= 2 ) {
+				throw new \RuntimeException( 'Could not claim the idempotency key.' );
+			}
+			if ( $this->retry_pause > 0 ) {
+				usleep( $this->retry_pause );
+			}
+		}
+	}
+
+	/**
+	 * Inserts a scope's row unless one exists.
+	 *
+	 * @param string $scope     Scope.
+	 * @param string $args_hash Arguments hash.
+	 * @param int    $now       Unix time.
+	 * @return bool Whether a row was inserted: false when one exists or the query failed.
+	 */
+	private function insert_key( string $scope, string $args_hash, int $now ): bool {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- FlitAgent's own table; names from constants, values prepared.
 		$inserted = $wpdb->query(
@@ -61,15 +110,30 @@ final class WpStore implements Store {
 				$now
 			)
 		);
-		if ( 1 === (int) $inserted ) {
+		return 1 === (int) $inserted;
+	}
+
+	/**
+	 * A scope's stored row, or null. A row of another scope, or one without an arguments hash, is a leftover result of
+	 * a failed query, not a key that was used.
+	 *
+	 * @param string $scope Scope.
+	 * @return array<string, mixed>|null `args_hash`, `status`, `response_json` and `created_at`.
+	 */
+	private function key_row( string $scope ): ?array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- FlitAgent's own table; names from constants, values prepared.
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT scope, args_hash, status, response_json, created_at FROM {$this->table( 'idempotency' )} WHERE scope = %s", $scope ), ARRAY_A );
+		if ( ! is_array( $row ) || ! isset( $row['scope'], $row['args_hash'], $row['status'] )
+			|| ! hash_equals( $scope, (string) $row['scope'] ) || '' === (string) $row['args_hash'] ) {
 			return null;
 		}
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- FlitAgent's own table; names from constants, values prepared.
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT args_hash, status, response_json FROM {$this->table( 'idempotency' )} WHERE scope = %s", $scope ), ARRAY_A );
-		if ( ! is_array( $row ) ) {
-			throw new \RuntimeException( 'Could not claim the idempotency key.' );
-		}
-		return $row;
+		return array(
+			'args_hash'     => (string) $row['args_hash'],
+			'status'        => (string) $row['status'],
+			'response_json' => (string) ( $row['response_json'] ?? '' ),
+			'created_at'    => (int) ( $row['created_at'] ?? 0 ),
+		);
 	}
 
 	/**
@@ -88,11 +152,27 @@ final class WpStore implements Store {
 	 * Frees a claimed scope.
 	 *
 	 * @param string $scope Scope.
+	 * @return bool False when the query failed.
 	 */
-	public function release_key( string $scope ): void {
+	public function release_key( string $scope ): bool {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- FlitAgent's own table; names from constants, values prepared.
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$this->table( 'idempotency' )} WHERE scope = %s AND status = %s", $scope, 'in_progress' ) );
+		return false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$this->table( 'idempotency' )} WHERE scope = %s AND status = %s", $scope, 'in_progress' ) );
+	}
+
+	/**
+	 * Takes over an abandoned in_progress scope, compare-and-set on its claim time.
+	 *
+	 * @param string $scope      Scope.
+	 * @param int    $claimed_at Claim time read with the row.
+	 * @param int    $now        Unix time.
+	 * @return bool
+	 */
+	public function reclaim_key( string $scope, int $claimed_at, int $now ): bool {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- FlitAgent's own table; names from constants, values prepared.
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table( 'idempotency' )} SET created_at = %d WHERE scope = %s AND status = %s AND created_at = %d", $now, $scope, 'in_progress', $claimed_at ) );
+		return 1 === $updated;
 	}
 
 	/**
@@ -291,7 +371,7 @@ final class WpStore implements Store {
 	 */
 	private function select( string $table, array $where, int $limit, int $offset ): array {
 		global $wpdb;
-		list( $clause, $values ) = $this->where( $where );
+		list( $clause, $values ) = $this->where( $where, 'receipts' === $table ? array_merge( self::FILTERS, self::RECEIPT_FILTERS ) : self::FILTERS );
 		$values[]                = max( 0, $limit );
 		$values[]                = max( 0, $offset );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- FlitAgent's own table; names from constants, values prepared.
@@ -302,15 +382,16 @@ final class WpStore implements Store {
 	/**
 	 * WHERE clause from equality filters on allowed columns.
 	 *
-	 * @param array<string, mixed> $where Filters.
+	 * @param array<string, mixed> $where   Filters.
+	 * @param string[]             $allowed Columns allowed.
 	 * @return array{0: string, 1: array<int, mixed>}
 	 * @throws \InvalidArgumentException On an unknown column.
 	 */
-	private function where( array $where ): array {
+	private function where( array $where, array $allowed ): array {
 		$parts  = array();
 		$values = array();
 		foreach ( $where as $column => $value ) {
-			if ( ! in_array( $column, self::FILTERS, true ) ) {
+			if ( ! in_array( $column, $allowed, true ) ) {
 				throw new \InvalidArgumentException( 'Unknown filter column.' );
 			}
 			$parts[]  = $column . ' = ' . ( is_int( $value ) ? '%d' : '%s' );

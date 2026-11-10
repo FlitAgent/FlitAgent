@@ -120,7 +120,7 @@ final class ModerateComment implements WriteTool, Reversible {
 
 		$from = Comments::status( $comment_id );
 		if ( 'untrash' === $action && 'trash' !== $from ) {
-			return Assessment::prohibited( 'not_in_trash', sprintf( 'Comment %d is not in the trash (status: %s).', $comment_id, $from ) );
+			return Assessment::prohibited( 'not_in_trash', sprintf( 'Comment %d is not in the trash (status: %s).', $comment_id, Comments::status_word( $from ) ) );
 		}
 		if ( 'trash' === $from && 'untrash' !== $action && 'trash' !== $action ) {
 			return Assessment::prohibited( 'in_trash', sprintf( 'Comment %d is in the trash; use status untrash to restore it first.', $comment_id ) );
@@ -135,7 +135,7 @@ final class ModerateComment implements WriteTool, Reversible {
 		}
 
 		return Assessment::reversible(
-			sprintf( 'Change comment %d by %s on post %d from %s to %s.', $comment_id, $comment->comment_author, (int) $comment->comment_post_ID, $from, $to ),
+			sprintf( 'Change comment %d by %s on post %d from %s to %s.', $comment_id, $comment->comment_author, (int) $comment->comment_post_ID, Comments::status_word( $from ), Comments::status_word( $to ) ),
 			array(
 				'comment_id' => $comment_id,
 				'post_id'    => (int) $comment->comment_post_ID,
@@ -189,7 +189,7 @@ final class ModerateComment implements WriteTool, Reversible {
 		if ( 'untrash' === $action ? 'trash' !== $status && '' !== $status : self::ACTIONS[ $action ] === $status ) {
 			return $outcome;
 		}
-		return $outcome->with_verification_failure( sprintf( 'The comment status is %s after the change.', '' === $status ? 'unknown' : $status ) );
+		return $outcome->with_verification_failure( sprintf( 'The comment status is %s after the change.', '' === $status ? 'unknown' : Comments::status_word( $status ) ) );
 	}
 
 	/**
@@ -214,7 +214,7 @@ final class ModerateComment implements WriteTool, Reversible {
 		$current = Comments::status( $comment_id );
 
 		return Assessment::reversible(
-			sprintf( 'Restore comment %d from %s to %s.', $comment_id, $current, $restored ),
+			sprintf( 'Restore comment %d from %s to %s.', $comment_id, Comments::status_word( $current ), Comments::status_word( $restored ) ),
 			array(
 				'comment_id' => $comment_id,
 				'current'    => array( 'status' => $current ),
@@ -251,6 +251,6 @@ final class ModerateComment implements WriteTool, Reversible {
 			),
 			Rollback::none()
 		);
-		return $status === $restored ? $outcome : $outcome->with_verification_failure( sprintf( 'The comment status is %s after the rollback.', $status ) );
+		return $status === $restored ? $outcome : $outcome->with_verification_failure( sprintf( 'The comment status is %s after the rollback.', '' === $status ? 'unknown' : Comments::status_word( $status ) ) );
 	}
 }

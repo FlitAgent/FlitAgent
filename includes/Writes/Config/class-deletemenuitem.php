@@ -183,8 +183,14 @@ final class DeleteMenuItem implements WriteTool, Reversible {
 		if ( $orphaned ) {
 			$fields['parent'] = 0;
 		}
-		$created = Rest::write( 'POST', '/wp/v2/menu-items', $fields );
-		$outcome = new Outcome( array( 'item_id' => isset( $created['id'] ) ? (int) $created['id'] : 0 ), Rollback::none() );
-		return $orphaned ? $outcome->with_warning( 'parent_gone', 'The item\'s parent no longer exists, so it was re-created at the top level.' ) : $outcome;
+		list( $created, $ordered ) = Menus::create_item( $fields );
+		$outcome                   = new Outcome( array( 'item_id' => $created ), Rollback::none() );
+		if ( $orphaned ) {
+			$outcome = $outcome->with_warning( 'parent_gone', 'The item\'s parent no longer exists, so it was re-created at the top level.' );
+		}
+		if ( ! $ordered ) {
+			$outcome = $outcome->with_warning( 'order_not_restored', sprintf( 'The item was re-created, but WordPress could not put it back at menu order %d, so it is at menu order 1.', (int) $fields['menu_order'] ) );
+		}
+		return $outcome;
 	}
 }

@@ -15,6 +15,7 @@ use FlitAgent\Writes\Outcome;
 use FlitAgent\Writes\Reversible;
 use FlitAgent\Writes\Risk;
 use FlitAgent\Writes\Rollback;
+use FlitAgent\Writes\Summary;
 use FlitAgent\Writes\WriteTool;
 
 defined( 'ABSPATH' ) || exit;
@@ -113,18 +114,18 @@ final class CreateTerm implements WriteTool, Reversible {
 			return $taxonomy;
 		}
 		if ( ! current_user_can( (string) $taxonomy->cap->edit_terms ) ) {
-			return Assessment::prohibited( 'forbidden', sprintf( 'You cannot create terms in %s.', $fields['taxonomy'] ) );
+			return Assessment::prohibited( 'forbidden', sprintf( 'You cannot create terms in %s.', Terms::named_taxonomy( $taxonomy ) ) );
 		}
 		Terms::check_parent( $taxonomy, $fields['parent'], 0 );
 
 		$existing = empty( $taxonomy->hierarchical ) ? term_exists( $fields['name'], $fields['taxonomy'] ) : term_exists( $fields['name'], $fields['taxonomy'], $fields['parent'] );
 		if ( is_array( $existing ) && ! empty( $existing['term_id'] ) ) {
-			return self::exists( sprintf( 'A term named "%s" already exists in %s', $fields['name'], $fields['taxonomy'] ), (int) $existing['term_id'] );
+			return self::exists( sprintf( 'A term named "%s" already exists in %s', $fields['name'], Terms::named_taxonomy( $taxonomy ) ), (int) $existing['term_id'] );
 		}
 		if ( '' !== $fields['slug'] ) {
 			$by_slug = get_term_by( 'slug', $fields['slug'], $fields['taxonomy'] );
 			if ( $by_slug && ! is_wp_error( $by_slug ) ) {
-				return self::exists( sprintf( 'The slug "%s" is already used in %s', $fields['slug'], $fields['taxonomy'] ), (int) $by_slug->term_id );
+				return self::exists( sprintf( 'The slug "%s" is already used in %s', $fields['slug'], Terms::named_taxonomy( $taxonomy ) ), (int) $by_slug->term_id );
 			}
 		}
 
@@ -165,12 +166,12 @@ final class CreateTerm implements WriteTool, Reversible {
 		$created = wp_insert_term( wp_slash( $fields['name'] ), $fields['taxonomy'], wp_slash( $extra ) );
 		if ( is_wp_error( $created ) ) {
 			if ( 'term_exists' === $created->get_error_code() && is_numeric( $created->get_error_data() ) ) {
-				throw new ToolError( sprintf( 'A matching term already exists in %s (term_id %d); nothing was created.', esc_textarea( $fields['taxonomy'] ), (int) $created->get_error_data() ) );
+				throw new ToolError( sprintf( 'A matching term already exists in %s (term_id %d); nothing was created.', esc_textarea( Terms::named_taxonomy( $fields['taxonomy'] ) ), (int) $created->get_error_data() ) );
 			}
-			throw new ToolError( sprintf( 'WordPress could not create the term in %s.', esc_textarea( $fields['taxonomy'] ) ) );
+			throw new ToolError( sprintf( 'WordPress could not create the term in %s.', esc_textarea( Terms::named_taxonomy( $fields['taxonomy'] ) ) ) );
 		}
 		if ( ! is_array( $created ) || empty( $created['term_id'] ) ) {
-			throw new ToolError( sprintf( 'WordPress could not create the term in %s.', esc_textarea( $fields['taxonomy'] ) ) );
+			throw new ToolError( sprintf( 'WordPress could not create the term in %s.', esc_textarea( Terms::named_taxonomy( $fields['taxonomy'] ) ) ) );
 		}
 
 		$term_id = (int) $created['term_id'];
@@ -231,7 +232,7 @@ final class CreateTerm implements WriteTool, Reversible {
 		$taxonomy = isset( $rollback['refs']['taxonomy'] ) ? (string) $rollback['refs']['taxonomy'] : '';
 		$term     = Terms::find( $term_id, $taxonomy );
 		if ( null !== $term && Terms::default_term_id( $taxonomy ) === $term_id ) {
-			return Assessment::prohibited( 'default_term', sprintf( 'Term %d is now the default %s term, so it cannot be deleted.', $term_id, $taxonomy ) );
+			return Assessment::prohibited( 'default_term', sprintf( 'Term %d is now the default %s term, so it cannot be deleted.', $term_id, Terms::name( $taxonomy ) ) );
 		}
 		$term = Terms::allowed( $term_id, $taxonomy, 'delete_term' );
 		if ( $term instanceof Assessment ) {
@@ -239,8 +240,9 @@ final class CreateTerm implements WriteTool, Reversible {
 		}
 
 		$objects = count( Terms::objects( $term ) );
+		$object  = get_taxonomy( $taxonomy );
 		return Assessment::reversible(
-			sprintf( 'Delete the term "%s" (term %d in %s) created by that write%s.', $term->name, $term_id, $taxonomy, 0 === $objects ? '' : sprintf( '; %d objects lose it', $objects ) ),
+			sprintf( 'Delete the %s "%s" (term %d) created by that write%s.', $object ? Terms::label( $object ) : 'term', $term->name, $term_id, 0 === $objects ? '' : '; ' . Summary::count( $objects, Terms::item_noun( $object, false ) . ' loses', Terms::item_noun( $object, true ) . ' lose' ) . ' it' ),
 			array(
 				'term_id'  => $term_id,
 				'current'  => Terms::snapshot( $term ) + array( 'objects' => $objects ),

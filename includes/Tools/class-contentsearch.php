@@ -148,7 +148,6 @@ final class ContentSearch implements Tool {
 				continue;
 			}
 			$items[] = array_merge(
-				array( 'id' => (int) $post->ID ),
 				RecentContent::item( $post ),
 				array( 'snippet' => self::snippet( $post ) )
 			);

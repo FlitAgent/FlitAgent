@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * The only place that touches builder runtime APIs. Each tool takes one of these as its default source; unit tests pass
  * stand-ins. Every call here only reads an in-memory registry the builder has already loaded for this request.
  *
- * Checked against Elementor 4.3.3, Beaver Builder Lite 2.11.0.6 and WPVibe 1.20.1's use of Bricks and Breakdance.
+ * Checked against Elementor 4.3.3 and WPVibe 1.20.1's use of Bricks and Breakdance.
  */
 final class LiveSources {
 
@@ -29,6 +29,37 @@ final class LiveSources {
 			'version'  => self::elementor_version(),
 			'widgets'  => (array) $plugin->widgets_manager->get_widget_types(),
 			'elements' => (array) $plugin->elements_manager->get_element_types(),
+		);
+	}
+
+	/**
+	 * Names of the widget and element types Elementor has registered (`widgets_manager->get_widget_types()`,
+	 * `elements_manager->get_element_types()`), the ones `Elements_Manager::create_element_instance()` accepts, or null
+	 * when Elementor and its managers are not loaded.
+	 *
+	 * `nested` lists the widgets that are Elementor's nested widgets (`Widget_Nested_Base`: Elementor's Tabs and
+	 * Accordion; Elementor Pro's Carousel, Mega Menu and Off-Canvas), whose children are containers.
+	 *
+	 * @return array{widgets: string[], elements: string[], nested: string[]}|null
+	 */
+	public static function elementor_types(): ?array {
+		if ( ! class_exists( '\Elementor\Plugin', false ) || ! isset( \Elementor\Plugin::$instance->widgets_manager, \Elementor\Plugin::$instance->elements_manager ) ) {
+			return null;
+		}
+		$plugin  = \Elementor\Plugin::$instance;
+		$widgets = (array) $plugin->widgets_manager->get_widget_types();
+		$base    = '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base';
+		$nested  = array();
+		foreach ( $widgets as $name => $widget ) {
+			if ( class_exists( $base, false ) && $widget instanceof $base ) {
+				$nested[] = (string) $name;
+			}
+		}
+
+		return array(
+			'widgets'  => array_map( 'strval', array_keys( $widgets ) ),
+			'elements' => array_map( 'strval', array_keys( (array) $plugin->elements_manager->get_element_types() ) ),
+			'nested'   => $nested,
 		);
 	}
 
@@ -78,25 +109,6 @@ final class LiveSources {
 	public static function breakdance_free_mode(): ?bool {
 		$function = '\Breakdance\Subscription\isFreeMode';
 		return function_exists( $function ) ? (bool) $function() : null;
-	}
-
-	/**
-	 * Beaver Builder's loaded modules (`FLBuilderModel::$modules`, filled on `init`).
-	 *
-	 * @return array<string, object>
-	 */
-	public static function beaver(): array {
-		return (array) \FLBuilderModel::$modules;
-	}
-
-	/**
-	 * A Beaver Builder module's default settings (`FLBuilderModel::get_module_defaults()`).
-	 *
-	 * @param string $slug Module slug.
-	 * @return mixed
-	 */
-	public static function beaver_defaults( string $slug ) {
-		return \FLBuilderModel::get_module_defaults( $slug );
 	}
 
 	/**

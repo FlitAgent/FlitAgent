@@ -13,8 +13,8 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Reads, encodes, fingerprints and restores a post's layout state: the builder's meta keys (as `get_post_meta()`
- * returns them, so PHP arrays and stdClass objects stay what they are) plus `post_content`, which Elementor and Beaver
- * rewrite on save.
+ * returns them, so PHP arrays and stdClass objects stay what they are) plus `post_content`, which Elementor rewrites
+ * on save.
  *
  * The encoding is lossless through JSON (receipts store `Canonical::json()`, which sorts keys and replaces invalid
  * UTF-8): every value is a tagged list, arrays and objects keep their key order as lists of pairs, and strings that are

@@ -25,7 +25,7 @@ final class Trashing {
 	 * Auto-approvable only when the post is not public. Read-only.
 	 *
 	 * @param int    $post_id  Post ID.
-	 * @param string $context  Sentence start, e.g. "Move to the trash".
+	 * @param string $context  Sentence with %s for the post, e.g. "Move %s to the trash".
 	 * @param bool   $rollback Whether this is a rollback (preview `current`/`restored` instead of `before`/`after`).
 	 * @return Assessment
 	 */
@@ -42,8 +42,12 @@ final class Trashing {
 			return $refusal;
 		}
 		$public = ! Posts::is_private( (string) $post->post_status );
+		$note   = array(
+			'publish' => ' This takes it off the live site.',
+			'future'  => ' This cancels its scheduled publication.',
+		);
 		return Assessment::reversible(
-			sprintf( '%s %s.%s', $context, Posts::name( $post ), $public ? ' This takes it off the live site.' : '' ),
+			sprintf( $context, Posts::name( $post ) ) . '.' . ( $note[ (string) $post->post_status ] ?? '' ),
 			self::preview( $post_id, (string) $post->post_status, 'trash', $rollback ),
 			Posts::state( $post ),
 			! $public
@@ -61,24 +65,32 @@ final class Trashing {
 	 * @return Assessment
 	 */
 	public static function assess_untrash( int $post_id, string $status, string $context, bool $rollback ): Assessment {
-		$post = Posts::find( $post_id, 'delete_post' );
+		// A rollback names a post from the caller's own receipt, so saying it is gone reveals nothing new.
+		if ( $rollback && ( $post_id < 1 || ! get_post( $post_id ) ) ) {
+			return Assessment::prohibited( 'not_found', sprintf( 'Post %d no longer exists, so it cannot be restored.', $post_id ) );
+		}
+		$post = Posts::find( $post_id, 'delete_post', $rollback ? 'restore' : '' );
 		if ( $post instanceof Assessment ) {
 			return $post;
 		}
 		if ( 'trash' !== $post->post_status ) {
-			return Assessment::prohibited( 'not_in_trash', sprintf( 'Post %d is not in the trash (status: %s).', $post_id, $post->post_status ) );
+			return Assessment::prohibited( 'not_in_trash', sprintf( 'Post %d is not in the trash (status: %s).', $post_id, Posts::status_word( (string) $post->post_status ) ) );
 		}
 		if ( '' === $status ) {
 			$status = self::status_before_trash( $post_id );
 		}
-		$as = sprintf( 'as %s', $status );
+		$as   = 'as ' . Posts::status_word( $status );
+		$note = 'future' === $status ? sprintf( ' It will be published on its scheduled date, %s.', $post->post_date ) : '';
 		// WordPress publishes a scheduled item whose date has passed as soon as it is restored.
 		if ( 'future' === $status && (string) $post->post_date <= Posts::now() ) {
 			$status = 'publish';
 			$as     = sprintf( 'as scheduled; its date %s has passed, so it will be published now', $post->post_date );
 		}
+		if ( 'publish' === $status ) {
+			$note = ' This puts it back on the live site.';
+		}
 		return Assessment::reversible(
-			sprintf( '%s %s from the trash %s.%s', $context, Posts::name( $post ), $as, Posts::is_private( $status ) ? '' : ' This puts it back on the live site.' ),
+			sprintf( '%s %s from the trash %s.%s', $context, Posts::name( $post ), $as, $note ),
 			self::preview( $post_id, 'trash', $status, $rollback ),
 			Posts::state( $post ) + array( 'restore_status' => $status ),
 			Posts::is_private( $status )
@@ -183,7 +195,7 @@ final class Trashing {
 			return $outcome->with_verification_failure( sprintf( 'Post %d could not be read back.', $post_id ) );
 		}
 		if ( $post->post_status !== $status ) {
-			return $outcome->with_warning( 'stored_differently', sprintf( 'Post %d has status %s, not %s.', $post_id, $post->post_status, $status ) );
+			return $outcome->with_warning( 'stored_differently', sprintf( 'Post %d has status %s, not %s.', $post_id, Posts::status_word( (string) $post->post_status ), Posts::status_word( $status ) ) );
 		}
 		return $outcome;
 	}

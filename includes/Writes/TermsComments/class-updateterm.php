@@ -131,18 +131,25 @@ final class UpdateTerm implements WriteTool, Reversible {
 		}
 
 		$before = array_intersect_key( Terms::snapshot( $term ), $changes );
-		if ( $before === $changes ) {
+		// The summary names only the fields that change; one sent with its current value stays in the preview.
+		$changing = array();
+		foreach ( $changes as $field => $value ) {
+			if ( ! array_key_exists( $field, $before ) || $before[ $field ] !== $value ) {
+				$changing[] = $field;
+			}
+		}
+		if ( array() === $changing ) {
 			throw new ToolError( sprintf( 'Term %d already has that %s; nothing to change.', (int) $term_id, esc_textarea( implode( ', ', array_keys( $changes ) ) ) ) );
 		}
 		if ( isset( $changes['slug'] ) && $changes['slug'] !== $before['slug'] ) {
 			$by_slug = get_term_by( 'slug', $changes['slug'], $taxonomy );
 			if ( $by_slug && ! is_wp_error( $by_slug ) && (int) $by_slug->term_id !== $term_id ) {
-				return Assessment::prohibited( 'term_exists', sprintf( 'The slug "%s" is already used in %s (term_id %d).', $changes['slug'], $taxonomy, (int) $by_slug->term_id ) );
+				return Assessment::prohibited( 'term_exists', sprintf( 'The slug "%s" is already used in %s (term_id %d).', $changes['slug'], Terms::named_taxonomy( $object ), (int) $by_slug->term_id ) );
 			}
 		}
 
 		return Assessment::reversible(
-			sprintf( 'Update the %s of the %s %s.', Summary::fields( array_keys( $changes ) ), Terms::label( $object ), Summary::named( (string) $term->name, sprintf( '%d', $term_id ) ) ),
+			sprintf( 'Update the %s of the %s %s.', Summary::fields( $changing ), Terms::label( $object ), Summary::named( (string) $term->name, sprintf( '%d', $term_id ) ) ),
 			array(
 				'term_id'  => $term_id,
 				'taxonomy' => $taxonomy,
@@ -234,16 +241,65 @@ final class UpdateTerm implements WriteTool, Reversible {
 			return Assessment::prohibited( 'parent_missing', sprintf( 'The previous parent term %d no longer exists, so term %d cannot be restored.', $restored['parent'], $term_id ) );
 		}
 
+		$current = Terms::snapshot( $term );
+		$object  = get_taxonomy( $taxonomy );
+		$fields  = self::changing( $object, $current, $restored );
+		if ( array() === $fields ) {
+			return Assessment::prohibited( 'already_restored', sprintf( 'The %s already has its previous fields; nothing to roll back.', self::rollback_name( $term, $object ) ) );
+		}
 		return Assessment::reversible(
-			sprintf( 'Restore the name, slug, description and parent of term %d in %s to "%s".', $term_id, $taxonomy, $restored['name'] ),
+			self::rollback_summary( $term, $object, $fields, $restored ),
 			array(
 				'term_id'  => $term_id,
-				'current'  => Terms::snapshot( $term ),
+				'current'  => $current,
 				'restored' => $restored,
 			),
 			array( 'fingerprint' => Terms::fingerprint( $term ) ),
 			false
 		);
+	}
+
+	/**
+	 * The fields the rollback changes: those that differ from the stored ones, never the parent on a flat taxonomy.
+	 *
+	 * @param object|false         $taxonomy Taxonomy object.
+	 * @param array<string, mixed> $current  Fields now.
+	 * @param array<string, mixed> $restored Fields the rollback restores.
+	 * @return string[]
+	 */
+	private static function changing( $taxonomy, array $current, array $restored ): array {
+		$fields = array();
+		foreach ( Terms::FIELDS as $field ) {
+			if ( $current[ $field ] !== $restored[ $field ] && ( 'parent' !== $field || ! empty( $taxonomy->hierarchical ) ) ) {
+				$fields[] = $field;
+			}
+		}
+		return $fields;
+	}
+
+	/**
+	 * The term as the rollback names it: `tag "News" (term 5)`.
+	 *
+	 * @param object       $term     Term now.
+	 * @param object|false $taxonomy Taxonomy object.
+	 * @return string
+	 */
+	private static function rollback_name( $term, $taxonomy ): string {
+		return sprintf( '%s "%s" (term %d)', $taxonomy ? Terms::label( $taxonomy ) : 'term', $term->name, (int) $term->term_id );
+	}
+
+	/**
+	 * What the rollback changes: the changing fields, and the name it goes back to when the name changes.
+	 *
+	 * @param object               $term     Term now.
+	 * @param object|false         $taxonomy Taxonomy object.
+	 * @param string[]             $fields   Changing fields.
+	 * @param array<string, mixed> $restored Fields the rollback restores.
+	 * @return string
+	 */
+	private static function rollback_summary( $term, $taxonomy, array $fields, array $restored ): string {
+		return sprintf( 'Restore the previous %s of the %s', Summary::fields( $fields ), self::rollback_name( $term, $taxonomy ) )
+			. ( in_array( 'name', $fields, true ) ? sprintf( '; the name goes back to "%s".', $restored['name'] ) : '.' );
 	}
 
 	/**

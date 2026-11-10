@@ -15,6 +15,7 @@ use FlitAgent\Writes\Definition;
 use FlitAgent\Writes\Outcome;
 use FlitAgent\Writes\Risk;
 use FlitAgent\Writes\Rollback;
+use FlitAgent\Writes\Summary;
 use FlitAgent\Writes\WriteTool;
 
 defined( 'ABSPATH' ) || exit;
@@ -97,10 +98,10 @@ final class DeleteAllTransients implements WriteTool {
 		$secret = array_values( array_filter( array_merge( $names['transients'], $names['site_transients'] ), array( Redactor::class, 'is_secret_key' ) ) );
 		return Assessment::destructive(
 			sprintf(
-				'Delete all %d transients and %d site transients. Most are caches their plugins rebuild%s; this cannot be rolled back.',
-				count( $names['transients'] ),
-				count( $names['site_transients'] ),
-				array() === $secret ? '' : sprintf( ', but %d look like tokens or keys that may not come back', count( $secret ) )
+				'Delete all %s and %s. Most are caches their plugins rebuild%s; this cannot be rolled back.',
+				Summary::count( count( $names['transients'] ), 'transient', 'transients' ),
+				Summary::count( count( $names['site_transients'] ), 'site transient', 'site transients' ),
+				array() === $secret ? '' : ', but ' . Summary::count( count( $secret ), 'looks like a token or key', 'look like tokens or keys' ) . ' that may not come back'
 			),
 			array(
 				'transients'      => count( $names['transients'] ),
@@ -110,7 +111,7 @@ final class DeleteAllTransients implements WriteTool {
 					'site_transients' => array_slice( $names['site_transients'], 0, self::PREVIEW_NAMES ),
 				),
 				'truncated'       => count( $names['transients'] ) > self::PREVIEW_NAMES || count( $names['site_transients'] ) > self::PREVIEW_NAMES,
-				'secret_looking'  => $secret,
+				'key_like_names'  => $secret,
 			),
 			array( 'names' => Canonical::hash( $names ) )
 		);
@@ -155,7 +156,7 @@ final class DeleteAllTransients implements WriteTool {
 	public function verify( array $args, Outcome $outcome ): Outcome {
 		$names = self::names();
 		$left  = count( $names['transients'] ) + count( $names['site_transients'] );
-		return 0 === $left ? $outcome : $outcome->with_warning( 'transients_left', sprintf( '%d transients are still in the database (re-created while deleting, or WordPress could not delete them).', $left ) );
+		return 0 === $left ? $outcome : $outcome->with_warning( 'transients_left', sprintf( '%s still in the database (re-created while deleting, or WordPress could not delete %s).', Summary::count( $left, 'transient is', 'transients are' ), 1 === $left ? 'it' : 'them' ) );
 	}
 
 	/**

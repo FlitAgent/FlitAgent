@@ -27,12 +27,21 @@ final class ContentQa implements Tool {
 	private $snapshot;
 
 	/**
+	 * Whether a post type is registered.
+	 *
+	 * @var callable
+	 */
+	private $type_exists;
+
+	/**
 	 * Constructor.
 	 *
-	 * @param callable|null $snapshot Takes (string[] $types, int $limit) and returns the snapshot; ContentSnapshot::read by default.
+	 * @param callable|null $snapshot    Takes (string[] $types, int $limit) and returns the snapshot; ContentSnapshot::read by default.
+	 * @param callable|null $type_exists Takes a post type name and says whether it is registered; post_type_exists by default.
 	 */
-	public function __construct( ?callable $snapshot = null ) {
-		$this->snapshot = $snapshot ? $snapshot : array( ContentSnapshot::class, 'read' );
+	public function __construct( ?callable $snapshot = null, ?callable $type_exists = null ) {
+		$this->snapshot    = $snapshot ? $snapshot : array( ContentSnapshot::class, 'read' );
+		$this->type_exists = $type_exists ? $type_exists : 'post_type_exists';
 	}
 
 	/**
@@ -82,13 +91,18 @@ final class ContentQa implements Tool {
 	public function call( array $arguments ): array {
 		Arguments::only( $arguments, array( 'post_types', 'limit' ), $this->name() );
 		$types = Arguments::strings( $arguments, 'post_types' );
-		$types = null === $types ? array( 'post', 'page' ) : $types;
+		$given = null !== $types;
+		$types = $given ? $types : array( 'post', 'page' );
 		if ( count( $types ) > 10 ) {
 			throw new ToolError( 'post_types accepts at most 10 post types.' );
 		}
 		foreach ( $types as $type ) {
 			if ( 1 !== preg_match( '/^[a-z0-9_-]{1,20}$/', $type ) ) {
 				throw new ToolError( 'post_types must be post type names such as "post" or "page".' );
+			}
+			// The default post and page are core's own; only types the caller names are looked up.
+			if ( $given && ! call_user_func( $this->type_exists, $type ) ) {
+				throw new ToolError( sprintf( 'Unknown post type "%s". post_types must be post types registered on this site, such as "post" or "page".', esc_textarea( $type ) ) );
 			}
 		}
 		$limit = Arguments::int( $arguments, 'limit', 200, 1, 500 );

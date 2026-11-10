@@ -62,7 +62,7 @@ final class RecentContent implements Tool {
 		return array(
 			'name'         => $this->name(),
 			'title'        => 'List FlitAgent recent content',
-			'description'  => 'From the FlitAgent WordPress plugin: lists the most recently modified posts and pages with title, type, status, author display name, modified date and link. Content is not included. Published items only, unless the logged-in user can edit other people\'s posts and pages; then drafts, pending, scheduled and private items too.',
+			'description'  => 'From the FlitAgent WordPress plugin: lists the most recently modified posts and pages with id, title, type, status, author display name, modified date and link. Content is not included. Published items only, unless the logged-in user can edit other people\'s posts and pages; then drafts, pending, scheduled and private items too.',
 			'inputSchema'  => array(
 				'type'                 => 'object',
 				'properties'           => array(
@@ -84,6 +84,7 @@ final class RecentContent implements Tool {
 						'items' => array(
 							'type'       => 'object',
 							'properties' => array(
+								'id'       => array( 'type' => 'integer' ),
 								'title'    => $string,
 								'type'     => array(
 									'type' => 'string',
@@ -100,7 +101,7 @@ final class RecentContent implements Tool {
 								),
 								'link'     => $nullable_string,
 							),
-							'required'   => array( 'title', 'type', 'status', 'author', 'modified', 'link' ),
+							'required'   => array( 'id', 'title', 'type', 'status', 'author', 'modified', 'link' ),
 						),
 					),
 					'statuses' => array(
@@ -203,6 +204,7 @@ final class RecentContent implements Tool {
 		$link = get_permalink( $post );
 
 		return array(
+			'id'       => (int) $post->ID,
 			'title'    => SiteText::plain( (string) $post->post_title ),
 			'type'     => (string) $post->post_type,
 			'status'   => (string) $post->post_status,

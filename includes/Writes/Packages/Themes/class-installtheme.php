@@ -58,7 +58,7 @@ final class InstallTheme implements WriteTool, Reversible {
 		return Definition::write(
 			$this->name(),
 			'FlitAgent: install a theme from WordPress.org',
-			'Installs a theme from the WordPress.org theme directory by its slug (e.g. "twentytwentyone"; no other source, ZIP URL or upload). It is installed but not activated (use switch_theme). Always needs an administrator\'s approval (returns approval_required) with a preview of the version, compatibility, theme page, any parent theme that is installed with it, and backup status. Refused when the theme is already installed, not in the directory, needs a newer WordPress or PHP, or the site does not allow file changes. rollback_change deletes it again while it is inactive.',
+			'Installs a theme from the WordPress.org theme directory by its slug (e.g. "twentytwentyone"; no other source, ZIP URL or upload). It is installed but not activated (use switch_theme). As in wp-admin, WordPress then also installs available translation updates and checks WordPress.org for updates. Always needs an administrator\'s approval (returns approval_required) with a preview of the version, compatibility, theme page, any parent theme that is installed with it, and backup status. Refused when the theme is already installed, not in the directory, needs a newer WordPress or PHP, or the site does not allow file changes. rollback_change deletes it again while it is inactive.',
 			array( 'slug' => self::slug_property() ),
 			array( 'slug' ),
 			$this->tiers(),

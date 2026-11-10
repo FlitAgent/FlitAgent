@@ -97,7 +97,7 @@ final class SetThemeMod implements WriteTool, Reversible {
 	 */
 	public function assess( array $args ): Assessment {
 		$key     = (string) $args['key'];
-		$refusal = self::refusal( $key );
+		$refusal = self::refusal( $key ) ?? self::unsupported( $key );
 		if ( null !== $refusal ) {
 			return $refusal;
 		}
@@ -187,8 +187,10 @@ final class SetThemeMod implements WriteTool, Reversible {
 	 * @return Assessment
 	 */
 	public function assess_rollback( array $rollback ): Assessment {
-		$key     = isset( $rollback['target']['id'] ) ? (string) $rollback['target']['id'] : '';
-		$refusal = self::refusal( $key ) ?? self::theme_switched( $rollback );
+		$key = isset( $rollback['target']['id'] ) ? (string) $rollback['target']['id'] : '';
+		// The theme check comes before the support check: the active theme may lack the feature only because it is not
+		// the theme the change was made on.
+		$refusal = self::refusal( $key ) ?? self::theme_switched( $rollback ) ?? self::unsupported( $key );
 		if ( null !== $refusal ) {
 			return $refusal;
 		}
@@ -239,7 +241,7 @@ final class SetThemeMod implements WriteTool, Reversible {
 	}
 
 	/**
-	 * Refusal for an unknown key, a missing capability or an unsupported feature, or null.
+	 * Refusal for an unknown key or a missing capability, or null.
 	 *
 	 * @param string $key Key.
 	 * @return Assessment|null
@@ -251,6 +253,16 @@ final class SetThemeMod implements WriteTool, Reversible {
 		if ( ! current_user_can( 'edit_theme_options' ) ) {
 			return Assessment::prohibited( 'forbidden', 'Changing theme mods needs the edit_theme_options capability.' );
 		}
+		return null;
+	}
+
+	/**
+	 * Refusal when the active theme does not support the key's feature, or null. Call after refusal().
+	 *
+	 * @param string $key Key.
+	 * @return Assessment|null
+	 */
+	private static function unsupported( string $key ): ?Assessment {
 		if ( ! current_theme_supports( self::KEYS[ $key ] ) ) {
 			return Assessment::prohibited( 'not_supported', sprintf( 'The active theme does not support %s, so it would ignore %s.', self::KEYS[ $key ], $key ) );
 		}
@@ -264,8 +276,7 @@ final class SetThemeMod implements WriteTool, Reversible {
 	 * @return Assessment|null
 	 */
 	private static function theme_switched( array $rollback ): ?Assessment {
-		$theme = isset( $rollback['refs']['theme'] ) ? (string) $rollback['refs']['theme'] : '';
-		return get_stylesheet() === $theme ? null : Assessment::prohibited( 'theme_changed', sprintf( 'Theme %s is no longer the active theme, so its theme mods cannot be restored.', $theme ) );
+		return ThemeBound::refusal( $rollback );
 	}
 
 	/**
@@ -315,7 +326,7 @@ final class SetThemeMod implements WriteTool, Reversible {
 		$mods   = get_theme_mods();
 		$exists = is_array( $mods ) && array_key_exists( $key, $mods );
 		return array(
-			'theme'  => (string) get_stylesheet(),
+			'theme'  => ThemeBound::current(),
 			'exists' => $exists,
 			'value'  => $exists ? $mods[ $key ] : null,
 		);

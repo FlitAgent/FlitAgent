@@ -34,7 +34,7 @@ final class SaveElementorPage extends ElementorSave {
 	 * {@inheritDoc}
 	 */
 	protected function describe(): string {
-		return 'Replaces the Elementor element tree of one post or page through Elementor\'s own document save (which filters HTML for users without unfiltered_html), marks it as built with Elementor and regenerates its CSS. For templates use save_elementor_template.';
+		return 'Replaces the Elementor element tree of one post or page through Elementor\'s own document save (which filters HTML for users without unfiltered_html), marks it as built with Elementor and regenerates its CSS. Top-level elements must be containers or sections, not widgets. A save that Elementor stores with no elements, when the page had some, is undone and fails; send an empty list to clear the page. For templates use save_elementor_template.';
 	}
 
 	/**

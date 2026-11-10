@@ -22,7 +22,7 @@ interface Store {
 	 * @param string $args_hash Hash of the arguments.
 	 * @param int    $now       Unix time.
 	 * @return array<string, mixed>|null Null when claimed now; otherwise the existing row (`args_hash`, `status`
-	 *                                   `in_progress`|`done`, `response_json`).
+	 *                                   `in_progress`|`done`, `response_json`, `created_at`: when it was claimed).
 	 */
 	public function claim_key( string $scope, string $args_hash, int $now ): ?array;
 
@@ -35,11 +35,22 @@ interface Store {
 	public function complete_key( string $scope, string $response_json ): void;
 
 	/**
-	 * Frees a claimed scope (the call was invalid and did nothing).
+	 * Frees a claimed scope (the call was invalid and did nothing). Only an `in_progress` row is deleted.
 	 *
 	 * @param string $scope Scope.
+	 * @return bool False when the database failed (the row may still be there).
 	 */
-	public function release_key( string $scope ): void;
+	public function release_key( string $scope ): bool;
+
+	/**
+	 * Takes over an abandoned `in_progress` scope: compare-and-set of its claim time, so only one caller wins.
+	 *
+	 * @param string $scope      Scope.
+	 * @param int    $claimed_at The claim time read with the row.
+	 * @param int    $now        Unix time, the new claim time.
+	 * @return bool Whether this caller took it over.
+	 */
+	public function reclaim_key( string $scope, int $claimed_at, int $now ): bool;
 
 	/**
 	 * Inserts a change set.
@@ -113,7 +124,7 @@ interface Store {
 	public function link_rollback( string $receipt, string $rollback_receipt ): bool;
 
 	/**
-	 * Receipts, newest first.
+	 * Receipts, newest first. Filters: status, tool, change_id, idempotency_key, user_id, client_id.
 	 *
 	 * @param array<string, mixed> $where  Column => value equality filters.
 	 * @param int                  $limit  Limit.

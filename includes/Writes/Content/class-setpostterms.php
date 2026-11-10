@@ -17,6 +17,7 @@ use FlitAgent\Writes\Risk;
 use FlitAgent\Writes\Rollback;
 use FlitAgent\Writes\WriteTool;
 use FlitAgent\Writes\Summary;
+use FlitAgent\Writes\TermsComments\Terms;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -110,17 +111,17 @@ final class SetPostTerms implements WriteTool, Reversible {
 		foreach ( $args['term_ids'] as $id ) {
 			$term = get_term( (int) $id, $taxonomy );
 			if ( ! $term || is_wp_error( $term ) ) {
-				throw new ToolError( sprintf( 'Term %d does not exist in %s. Terms are never created here; create it first.', (int) $id, esc_textarea( $taxonomy ) ) );
+				throw new ToolError( sprintf( 'Term %d does not exist in %s. Terms are never created here; create it first.', (int) $id, esc_textarea( self::in_taxonomy( $taxonomy ) ) ) );
 			}
 			$ids[] = (int) $id;
 		}
 		$result = self::result( $current, $ids, isset( $args['mode'] ) ? (string) $args['mode'] : 'replace' );
 		if ( $result === $current ) {
-			throw new ToolError( sprintf( 'Post %d already has those %s terms; nothing to change.', (int) $post_id, esc_textarea( $taxonomy ) ) );
+			throw new ToolError( sprintf( 'Post %d already has those terms in %s; nothing to change.', (int) $post_id, esc_textarea( self::in_taxonomy( $taxonomy ) ) ) );
 		}
 
 		return Assessment::reversible(
-			sprintf( 'Set the %s terms of %s to %s.', $taxonomy, Posts::name( $post ), array() === $result ? 'none' : Summary::join( $result ) ) . Posts::live_note( $post ),
+			sprintf( 'Set %s of %s to %s.', self::taxonomy_name( $taxonomy ), Posts::name( $post ), self::term_names( $taxonomy, $result ) ) . Posts::live_note( $post ),
 			array(
 				'post_id'  => $post_id,
 				'taxonomy' => $taxonomy,
@@ -166,7 +167,7 @@ final class SetPostTerms implements WriteTool, Reversible {
 	 */
 	public function verify( array $args, Outcome $outcome ): Outcome {
 		$stored = self::ids( (int) $args['post_id'], (string) $args['taxonomy'] );
-		return $stored === $outcome->result()['term_ids'] ? $outcome : $outcome->with_warning( 'stored_differently', sprintf( 'The post has %s terms %s, not the requested ones.', $args['taxonomy'], array() === $stored ? 'none' : implode( ', ', $stored ) ) );
+		return $stored === $outcome->result()['term_ids'] ? $outcome : $outcome->with_warning( 'stored_differently', ( array() === $stored ? sprintf( 'The post has no terms in %s, not the requested ones.', self::in_taxonomy( (string) $args['taxonomy'] ) ) : sprintf( 'The post has terms %s in %s, not the requested ones.', implode( ', ', $stored ), self::in_taxonomy( (string) $args['taxonomy'] ) ) ) );
 	}
 
 	/**
@@ -186,7 +187,7 @@ final class SetPostTerms implements WriteTool, Reversible {
 		$restored               = self::snapshot( $rollback );
 
 		return Assessment::reversible(
-			sprintf( 'Restore the %s terms of %s to %s.', $taxonomy, Posts::name( $post ), array() === $restored ? 'none' : Summary::join( $restored ) ) . Posts::live_note( $post ),
+			sprintf( 'Restore %s of %s to %s.', self::taxonomy_name( $taxonomy ), Posts::name( $post ), self::term_names( $taxonomy, $restored ) ) . Posts::live_note( $post ),
 			array(
 				'post_id'  => $post_id,
 				'taxonomy' => $taxonomy,
@@ -237,10 +238,10 @@ final class SetPostTerms implements WriteTool, Reversible {
 		}
 		$object = get_taxonomy( $taxonomy );
 		if ( ! $object || empty( $object->show_in_rest ) || ! is_object_in_taxonomy( (string) $post->post_type, $taxonomy ) ) {
-			return Assessment::prohibited( 'not_supported', sprintf( 'Taxonomy %s is not available for %s items over the REST API.', $taxonomy, $post->post_type ) );
+			return Assessment::prohibited( 'not_supported', sprintf( '%s is not available for %s items over the REST API.', ucfirst( self::in_taxonomy( $taxonomy ) ), $post->post_type ) );
 		}
 		if ( ! current_user_can( $object->cap->assign_terms ) ) {
-			return Assessment::prohibited( 'forbidden', sprintf( 'You cannot assign %s terms.', $taxonomy ) );
+			return Assessment::prohibited( 'forbidden', sprintf( 'You cannot assign terms in %s.', self::in_taxonomy( $taxonomy ) ) );
 		}
 		return array( $post, self::ids( $post_id, $taxonomy ) );
 	}
@@ -289,7 +290,7 @@ final class SetPostTerms implements WriteTool, Reversible {
 	private static function write( int $post_id, string $taxonomy, array $ids ): void {
 		$set = wp_set_object_terms( $post_id, array_map( 'intval', $ids ), $taxonomy, false );
 		if ( is_wp_error( $set ) ) {
-			throw new ToolError( sprintf( 'WordPress could not set the %s terms of post %d.', esc_textarea( $taxonomy ), (int) $post_id ) );
+			throw new ToolError( sprintf( 'WordPress could not set the terms of post %d in %s.', (int) $post_id, esc_textarea( self::in_taxonomy( $taxonomy ) ) ) );
 		}
 	}
 
@@ -306,7 +307,7 @@ final class SetPostTerms implements WriteTool, Reversible {
 		$post    = get_post( $post_id );
 		$current = self::ids( $post_id, $taxonomy );
 		if ( ! $post || self::state( $post, $taxonomy, $current ) !== $expected ) {
-			throw new ToolError( sprintf( 'The %s terms of post %d changed after they were assessed; nothing was changed.', esc_textarea( $taxonomy ), (int) $post_id ) );
+			throw new ToolError( sprintf( 'The terms of post %d in %s changed after they were assessed; nothing was changed.', (int) $post_id, esc_textarea( self::in_taxonomy( $taxonomy ) ) ) );
 		}
 		return $current;
 	}
@@ -354,6 +355,50 @@ final class SetPostTerms implements WriteTool, Reversible {
 			$labels[] = $term && ! is_wp_error( $term ) ? sprintf( '%d (%s)', $id, $term->name ) : (string) $id;
 		}
 		return array( $taxonomy => implode( ', ', $labels ) );
+	}
+
+	/**
+	 * The taxonomy as a summary names it: its label with its slug ("the Tags (post_tag)"), or "the post_tag terms"
+	 * without a label.
+	 *
+	 * @param string $taxonomy Taxonomy.
+	 * @return string
+	 */
+	private static function taxonomy_name( string $taxonomy ): string {
+		$object = get_taxonomy( $taxonomy );
+		$label  = $object && isset( $object->labels->name ) ? trim( (string) $object->labels->name ) : '';
+		return '' === $label ? sprintf( 'the %s terms', $taxonomy ) : sprintf( 'the %s (%s)', $label, $taxonomy );
+	}
+
+	/**
+	 * The taxonomy as refusals and errors name it, like the term tools: "the tag (post_tag) taxonomy".
+	 *
+	 * @param string $taxonomy Taxonomy.
+	 * @return string
+	 */
+	private static function in_taxonomy( string $taxonomy ): string {
+		$object = get_taxonomy( $taxonomy );
+		return Terms::named_taxonomy( is_object( $object ) ? $object : (object) array( 'name' => $taxonomy ) );
+	}
+
+	/**
+	 * Terms as a summary lists them: quoted name and id (`"News" (3)`), the bare id when the term has no name, or "none".
+	 *
+	 * @param string $taxonomy Taxonomy.
+	 * @param int[]  $ids      Term ids.
+	 * @return string
+	 */
+	private static function term_names( string $taxonomy, array $ids ): string {
+		if ( array() === $ids ) {
+			return 'none';
+		}
+		$names = array();
+		foreach ( $ids as $id ) {
+			$term    = get_term( $id, $taxonomy );
+			$name    = $term && ! is_wp_error( $term ) ? (string) $term->name : '';
+			$names[] = '' === trim( $name ) ? (string) $id : sprintf( '%s (%d)', Summary::named( $name, '' ), $id );
+		}
+		return Summary::join( $names );
 	}
 
 	/**

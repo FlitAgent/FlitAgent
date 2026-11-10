@@ -184,7 +184,7 @@ final class PageHtml implements Tool {
 		$url = $this->input_url( $arguments['url'] );
 
 		for ( $redirects = 0; ; $redirects++ ) {
-			$response = wp_safe_remote_get( $url, $this->request_args() );
+			$response = wp_safe_remote_get( $url, $this->request_args( $url ) );
 			if ( is_wp_error( $response ) ) {
 				throw new ToolError( 'Could not fetch the page: ' . esc_textarea( $response->get_error_message() ) );
 			}
@@ -286,12 +286,15 @@ final class PageHtml implements Tool {
 	}
 
 	/**
-	 * Request options: no automatic redirects, a size cap, and nothing that identifies the caller.
+	 * Request options: no automatic redirects, a size cap, and nothing that identifies the caller. A request to this
+	 * site verifies TLS as core's own loopback requests do (the `https_local_ssl_verify` filter, off by default, so a
+	 * self-signed certificate works); any other URL keeps the default verification.
 	 *
+	 * @param string $url URL about to be requested.
 	 * @return array<string, mixed>
 	 */
-	private function request_args(): array {
-		return array(
+	private function request_args( string $url ): array {
+		$args = array(
 			'timeout'             => self::TIMEOUT,
 			'redirection'         => 0,
 			'reject_unsafe_urls'  => true,
@@ -300,6 +303,11 @@ final class PageHtml implements Tool {
 			'headers'             => array( 'Accept' => 'text/html,application/xhtml+xml,*/*;q=0.8' ),
 			'user-agent'          => 'FlitAgent/' . FLITAGENT_VERSION . ' (get_page_html)',
 		);
+		if ( null !== $this->same_site( $url ) ) {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core's own loopback filter, applied as core's loopback requests apply it.
+			$args['sslverify'] = apply_filters( 'https_local_ssl_verify', false, $url );
+		}
+		return $args;
 	}
 
 	/**

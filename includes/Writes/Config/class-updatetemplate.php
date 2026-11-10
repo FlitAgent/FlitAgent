@@ -184,19 +184,27 @@ final class UpdateTemplate implements WriteTool, Reversible {
 	}
 
 	/**
-	 * Reads the template back; content filters may store it differently.
+	 * Reads the stored template post back; content filters may store it differently. It compares the saved
+	 * post_content, title and excerpt, not the REST edit view, whose content WordPress expands (theme attributes on
+	 * template-part blocks, hooked blocks), so that view differs from what was stored even when nothing changed it.
 	 *
 	 * @param array<string, mixed> $args    Arguments.
 	 * @param Outcome              $outcome Outcome.
 	 * @return Outcome
 	 */
 	public function verify( array $args, Outcome $outcome ): Outcome {
-		$template = Rest::read( self::route( self::kind( $args ), (string) $args['template_id'] ) );
-		if ( null === $template ) {
+		$result = $outcome->result();
+		$post   = isset( $result['wp_id'] ) && (int) $result['wp_id'] > 0 ? get_post( (int) $result['wp_id'] ) : null;
+		if ( ! is_object( $post ) ) {
 			return $outcome->with_verification_failure( 'The template could not be read back.' );
 		}
+		$stored  = array(
+			'content'     => (string) $post->post_content,
+			'title'       => (string) $post->post_title,
+			'description' => (string) $post->post_excerpt,
+		);
 		$changes = self::changes( $args );
-		if ( array_intersect_key( self::state( $template ), $changes ) === array_map( 'strval', $changes ) ) {
+		if ( array_intersect_key( $stored, $changes ) === array_map( 'strval', $changes ) ) {
 			return $outcome->with_result( array( 'stored_verbatim' => true ) );
 		}
 		return $outcome->with_result( array( 'stored_verbatim' => false ) )->with_warning( 'stored_differently', 'WordPress stored the template differently from the request (a filter changed it).' );

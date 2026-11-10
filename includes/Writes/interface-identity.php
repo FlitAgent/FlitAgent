@@ -30,7 +30,13 @@ interface Identity {
 	public function client_name(): string;
 
 	/**
-	 * Whether the caller passes the protected-tool gate (`manage_options`).
+	 * Whether the caller passes the protected-tool gate (`manage_options`) and the credential may write.
 	 */
 	public function can_write(): bool;
+
+	/**
+	 * Whether the caller passes the protected-tool gate (`manage_options`), whatever the credential's scope: enough to
+	 * read changes and receipts (`get_change`, `list_receipts`), not to write.
+	 */
+	public function can_review(): bool;
 }

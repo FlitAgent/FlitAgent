@@ -36,11 +36,11 @@ final class Terms {
 	 */
 	public static function taxonomy( string $taxonomy ) {
 		if ( in_array( $taxonomy, self::RESERVED, true ) ) {
-			return Assessment::prohibited( 'not_supported', sprintf( 'Terms of %s are managed by menus or are fixed post formats, so FlitAgent does not change them with term tools.', $taxonomy ) );
+			return Assessment::prohibited( 'not_supported', sprintf( 'Terms of %s are managed by menus or are fixed post formats, so FlitAgent does not change them with term tools.', self::named_taxonomy( $taxonomy ) ) );
 		}
 		$object = get_taxonomy( $taxonomy );
 		if ( ! $object || empty( $object->show_in_rest ) ) {
-			return Assessment::prohibited( 'not_supported', sprintf( 'Taxonomy %s does not exist or is not available over the REST API, so FlitAgent does not change its terms.', $taxonomy ) );
+			return Assessment::prohibited( 'not_supported', sprintf( '%s does not exist or is not available over the REST API, so FlitAgent does not change its terms.', ucfirst( self::named_taxonomy( is_object( $object ) ? $object : (object) array( 'name' => $taxonomy ) ) ) ) );
 		}
 		return $object;
 	}
@@ -85,7 +85,7 @@ final class Terms {
 	 * @return Assessment
 	 */
 	public static function not_found( int $term_id, string $taxonomy, string $verb ): Assessment {
-		return Assessment::prohibited( 'not_found', sprintf( 'Term %d was not found in %s or you cannot %s it.', $term_id, $taxonomy, $verb ) );
+		return Assessment::prohibited( 'not_found', sprintf( 'Term %d was not found in %s or you cannot %s it.', $term_id, self::named_taxonomy( $taxonomy ), $verb ) );
 	}
 
 	/**
@@ -101,13 +101,13 @@ final class Terms {
 			return;
 		}
 		if ( empty( $taxonomy->hierarchical ) ) {
-			throw new ToolError( sprintf( 'Taxonomy %s is not hierarchical, so its terms cannot have a parent.', esc_textarea( $taxonomy->name ) ) );
+			throw new ToolError( sprintf( '%s is not hierarchical, so its terms cannot have a parent.', esc_textarea( ucfirst( self::named_taxonomy( $taxonomy ) ) ) ) );
 		}
 		if ( $parent_id === $term_id ) {
 			throw new ToolError( 'A term cannot be its own parent.' );
 		}
 		if ( null === self::find( $parent_id, (string) $taxonomy->name ) ) {
-			throw new ToolError( sprintf( 'Parent term %d was not found in %s.', (int) $parent_id, esc_textarea( $taxonomy->name ) ) );
+			throw new ToolError( sprintf( 'Parent term %d was not found in %s.', (int) $parent_id, esc_textarea( self::named_taxonomy( $taxonomy ) ) ) );
 		}
 		if ( $term_id > 0 && in_array( $term_id, array_map( 'intval', (array) get_ancestors( $parent_id, (string) $taxonomy->name, 'taxonomy' ) ), true ) ) {
 			throw new ToolError( sprintf( 'Term %d is a descendant of term %d, so it cannot become its parent.', (int) $parent_id, (int) $term_id ) );
@@ -191,6 +191,30 @@ final class Terms {
 	}
 
 	/**
+	 * A taxonomy as messages name it: its singular label in lower case, with the slug in parentheses when the two
+	 * differ ("tag (post_tag)", "category"), or the slug when it has no label.
+	 *
+	 * @param object|string $taxonomy Taxonomy object or name.
+	 * @return string
+	 */
+	public static function name( $taxonomy ): string {
+		$object = is_object( $taxonomy ) ? $taxonomy : get_taxonomy( (string) $taxonomy );
+		$slug   = is_object( $taxonomy ) ? (string) $taxonomy->name : (string) $taxonomy;
+		$label  = is_object( $object ) && isset( $object->labels->singular_name ) ? strtolower( trim( (string) $object->labels->singular_name ) ) : '';
+		return '' === $label || $label === $slug ? $slug : sprintf( '%s (%s)', $label, $slug );
+	}
+
+	/**
+	 * A taxonomy as a place terms are in: "the tag (post_tag) taxonomy".
+	 *
+	 * @param object|string $taxonomy Taxonomy object or name.
+	 * @return string
+	 */
+	public static function named_taxonomy( $taxonomy ): string {
+		return sprintf( 'the %s taxonomy', self::name( $taxonomy ) );
+	}
+
+	/**
 	 * Singular label of a taxonomy, lower case.
 	 *
 	 * @param object $taxonomy Taxonomy object.
@@ -198,5 +222,22 @@ final class Terms {
 	 */
 	public static function label( $taxonomy ): string {
 		return isset( $taxonomy->labels->singular_name ) ? strtolower( (string) $taxonomy->labels->singular_name ) : (string) $taxonomy->name;
+	}
+
+	/**
+	 * What a taxonomy's terms are attached to, as summaries say it: posts when it is only on posts and pages, items
+	 * otherwise (products, custom types, users).
+	 *
+	 * @param object|false $taxonomy Taxonomy object.
+	 * @param bool         $plural   Plural.
+	 * @return string
+	 */
+	public static function item_noun( $taxonomy, bool $plural ): string {
+		$types = $taxonomy && isset( $taxonomy->object_type ) ? (array) $taxonomy->object_type : array();
+		$posts = array() !== $types && array() === array_diff( $types, array( 'post', 'page' ) );
+		if ( $posts ) {
+			return $plural ? 'posts' : 'post';
+		}
+		return $plural ? 'items' : 'item';
 	}
 }

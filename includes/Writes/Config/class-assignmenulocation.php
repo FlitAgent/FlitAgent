@@ -134,7 +134,7 @@ final class AssignMenuLocation implements WriteTool, Reversible {
 				'location' => $location,
 				'menu_id'  => (int) $args['menu_id'],
 			),
-			Rollback::make( Rollback::SNAPSHOT, 'menu_location', $location, array(), array( 'menu_id' => $owner ) ),
+			Rollback::make( Rollback::SNAPSHOT, 'menu_location', $location, ThemeBound::refs(), array( 'menu_id' => $owner ) ),
 			array( 'fingerprint' => self::fingerprint( $location ) )
 		);
 	}
@@ -159,7 +159,7 @@ final class AssignMenuLocation implements WriteTool, Reversible {
 	public function assess_rollback( array $rollback ): Assessment {
 		$location = isset( $rollback['target']['id'] ) ? (string) $rollback['target']['id'] : '';
 		$previous = isset( $rollback['before']['menu_id'] ) ? (int) $rollback['before']['menu_id'] : 0;
-		$refusal  = Menus::refusal();
+		$refusal  = Menus::refusal() ?? ThemeBound::refusal( $rollback );
 		if ( null !== $refusal ) {
 			return $refusal;
 		}

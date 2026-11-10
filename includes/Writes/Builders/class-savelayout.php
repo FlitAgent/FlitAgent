@@ -8,9 +8,11 @@
 namespace FlitAgent\Writes\Builders;
 
 use FlitAgent\Mcp\ToolError;
+use FlitAgent\Writes\Buffers;
 use FlitAgent\Writes\Assessment;
 use FlitAgent\Writes\Canonical;
 use FlitAgent\Writes\Definition;
+use FlitAgent\Writes\Ops\ErrorText;
 use FlitAgent\Writes\Outcome;
 use FlitAgent\Writes\Reversible;
 use FlitAgent\Writes\Risk;
@@ -111,6 +113,20 @@ abstract class SaveLayout implements WriteTool, Reversible {
 	abstract protected function code_elements( $layout ): array;
 
 	/**
+	 * Why a save that the builder accepted must be undone because it lost the whole layout, or null. For builders that
+	 * silently drop elements they do not accept.
+	 *
+	 * @param mixed $sent    Normalized layout.
+	 * @param mixed $before  Layout before the save (null for none).
+	 * @param mixed $stored  Layout read back after the save (null for none).
+	 * @param int   $post_id Post ID.
+	 * @return string|null
+	 */
+	protected function emptied( $sent, $before, $stored, int $post_id ): ?string {
+		return null;
+	}
+
+	/**
 	 * A refusal when the post is the wrong kind for this tool.
 	 *
 	 * @param object $post Post.
@@ -125,6 +141,37 @@ abstract class SaveLayout implements WriteTool, Reversible {
 	 */
 	protected function always_destructive(): bool {
 		return false;
+	}
+
+	/**
+	 * A layout as compared after the save: the builder's own harmless rewrites (defaults it fills in) undone, so they
+	 * are not reported as stored differently. As it is by default.
+	 *
+	 * @param mixed $layout Layout.
+	 * @return mixed
+	 */
+	protected function comparable( $layout ) {
+		return $layout;
+	}
+
+	/**
+	 * The refusal when the builder does not let the current user edit the post's layout.
+	 *
+	 * @param object $post Post.
+	 * @return Assessment
+	 */
+	protected function access_refusal( $post ): Assessment {
+		return Assessment::prohibited( 'builder_access', sprintf( '%s\'s own access settings do not let you edit the layout of post %d.', $this->builder(), (int) $post->ID ) );
+	}
+
+	/**
+	 * The post's kind in words: its post type with spaces (page, product).
+	 *
+	 * @param object $post Post.
+	 * @return string
+	 */
+	protected function kind_of( $post ): string {
+		return str_replace( '_', ' ', (string) $post->post_type );
 	}
 
 	/**
@@ -195,8 +242,12 @@ abstract class SaveLayout implements WriteTool, Reversible {
 			return $code;
 		}
 
+		$clears  = array() === $layout && is_array( $current ) && array() !== $current;
+		$summary = $clears
+			? sprintf( 'Clear the %s layout of %s, removing every element.', $this->builder(), $this->summary_name( $post, $code ) )
+			: sprintf( 'Save the %s layout of %s%s.', $this->builder(), $this->summary_name( $post, $code ), self::code_note( $code ) );
 		return $this->tiered(
-			sprintf( 'Save the %s layout of %s%s.', $this->builder(), $this->summary_name( $post, $code ), self::code_note( $code ) ) . self::post_live_note( $post ),
+			$summary . $this->post_live_note( $post ),
 			array(
 				'post_id'       => $post_id,
 				'post_type'     => (string) $post->post_type,
@@ -232,13 +283,25 @@ abstract class SaveLayout implements WriteTool, Reversible {
 
 		$layout = $this->normalize( $args[ $this->property() ] );
 		try {
-			$warnings = $this->engine->save( $post_id, $layout );
+			$warnings = self::quietly(
+				function () use ( $post_id, $layout ) {
+					return $this->engine->save( $post_id, $layout );
+				}
+			);
 		} catch ( \Throwable $e ) {
 			$this->restore_after_failure( $post_id, $state );
-			throw new ToolError( sprintf( '%s%s could not save the layout of post %d; the previous layout was restored.', $e instanceof ToolError ? esc_textarea( ToolError::plain( $e ) ) . ' ' : '', esc_textarea( $this->builder() ), (int) $post_id ) );
+			if ( $e instanceof ToolError ) {
+				throw new ToolError( sprintf( '%s %s could not save the layout of post %d; the previous layout was restored.', esc_textarea( ToolError::plain( $e ) ), esc_textarea( $this->builder() ), (int) $post_id ) );
+			}
+			throw new ToolError( sprintf( '%s could not save the layout of post %d (%s); the previous layout was restored.', esc_textarea( $this->builder() ), (int) $post_id, esc_textarea( rtrim( ErrorText::of( $e ), '.' ) ) ) );
 		}
 
 		$after   = get_post( $post_id );
+		$emptied = $this->emptied( $layout, $this->layout_from( Snapshot::values( $state ) ), $after ? $this->layout_from( Snapshot::values( Snapshot::read( $after, $this->meta_keys() ) ) ) : null, $post_id );
+		if ( null !== $emptied ) {
+			$this->restore_after_failure( $post_id, $state );
+			throw new ToolError( esc_textarea( $emptied ) );
+		}
 		$outcome = new Outcome(
 			array(
 				'post_id' => $post_id,
@@ -267,7 +330,7 @@ abstract class SaveLayout implements WriteTool, Reversible {
 		}
 
 		$stored = $this->layout_from( Snapshot::values( Snapshot::read( $post, $this->meta_keys() ) ) );
-		if ( null !== $stored && Canonical::hash( $stored ) === Canonical::hash( $this->normalize( $args[ $this->property() ] ) ) ) {
+		if ( null !== $stored && Canonical::hash( $this->comparable( $stored ) ) === Canonical::hash( $this->comparable( $this->normalize( $args[ $this->property() ] ) ) ) ) {
 			return $outcome->with_result( array( 'stored_verbatim' => true ) );
 		}
 		return $outcome->with_result( array( 'stored_verbatim' => false ) )->with_warning( 'stored_differently', sprintf( '%s stored the layout differently from the request (it may add defaults or filter settings). Read the page layout to see what was saved.', $this->builder() ) );
@@ -299,7 +362,7 @@ abstract class SaveLayout implements WriteTool, Reversible {
 		}
 
 		return $this->tiered(
-			sprintf( 'Restore the previous %s layout of %s%s.', $this->builder(), $this->summary_name( $post, $code ), self::code_note( $code ) ) . self::post_live_note( $post ),
+			sprintf( 'Restore the previous %s layout of %s%s.', $this->builder(), $this->summary_name( $post, $code ), self::code_note( $code ) ) . $this->post_live_note( $post ),
 			array(
 				'post_id'       => $post_id,
 				'status'        => (string) $post->post_status,
@@ -329,11 +392,15 @@ abstract class SaveLayout implements WriteTool, Reversible {
 			throw new ToolError( sprintf( 'Post %d changed after the rollback was assessed; nothing was restored.', (int) $post_id ) );
 		}
 
-		Snapshot::restore( $post_id, $before, (string) $post->post_content );
+		self::quietly(
+			static function () use ( $post_id, $before, $post ) {
+				Snapshot::restore( $post_id, $before, (string) $post->post_content );
+			}
+		);
 
 		$warnings = array();
 		try {
-			$this->engine->refresh( $post_id );
+			$this->refresh_quietly( $post_id );
 		} catch ( \Throwable $e ) {
 			$warnings['css_regen_failed'] = sprintf( 'The layout was restored, but %s could not regenerate its CSS; open and save the page in the builder.', $this->builder() );
 		}
@@ -377,7 +444,7 @@ abstract class SaveLayout implements WriteTool, Reversible {
 			return $wrong;
 		}
 		if ( ! $this->engine->can_edit( $post_id ) ) {
-			return Assessment::prohibited( 'builder_access', sprintf( '%s\'s own access settings do not let you edit the layout of post %d.', $this->builder(), $post_id ) );
+			return $this->access_refusal( $post );
 		}
 		return $post;
 	}
@@ -446,7 +513,7 @@ abstract class SaveLayout implements WriteTool, Reversible {
 	 * @return string
 	 */
 	private function summary_name( $post, array $code ): string {
-		$kind = self::kind_of( $post );
+		$kind = $this->kind_of( $post );
 		return $this->destructive_save( $post, $code ) ? Summary::named_with_id( $kind, (string) $post->post_title, (int) $post->ID ) : Summary::named( (string) $post->post_title, sprintf( '%s %d', $kind, (int) $post->ID ) );
 	}
 
@@ -456,18 +523,8 @@ abstract class SaveLayout implements WriteTool, Reversible {
 	 * @param object $post Post.
 	 * @return string
 	 */
-	private static function post_live_note( $post ): string {
-		return Summary::live_note( (string) $post->post_status, self::kind_of( $post ) );
-	}
-
-	/**
-	 * The post's kind in words: its post type with spaces (page, elementor library).
-	 *
-	 * @param object $post Post.
-	 * @return string
-	 */
-	private static function kind_of( $post ): string {
-		return str_replace( '_', ' ', (string) $post->post_type );
+	private function post_live_note( $post ): string {
+		return Summary::live_note( (string) $post->post_status, $this->kind_of( $post ) );
 	}
 
 	/**
@@ -479,11 +536,45 @@ abstract class SaveLayout implements WriteTool, Reversible {
 	private function restore_after_failure( int $post_id, array $state ): void {
 		try {
 			$now = get_post( $post_id );
-			Snapshot::restore( $post_id, $state, $now ? (string) $now->post_content : '' );
-			$this->engine->refresh( $post_id );
+			self::quietly(
+				static function () use ( $post_id, $state, $now ) {
+					Snapshot::restore( $post_id, $state, $now ? (string) $now->post_content : '' );
+				}
+			);
+			$this->refresh_quietly( $post_id );
 		} catch ( \Throwable $e ) {
 			unset( $e );
 			// The save already failed; its error is what the caller gets.
+		}
+	}
+
+	/**
+	 * Regenerates the builder's CSS and caches, discarding anything it prints.
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	private function refresh_quietly( int $post_id ): void {
+		self::quietly(
+			function () use ( $post_id ) {
+				$this->engine->refresh( $post_id );
+			}
+		);
+	}
+
+	/**
+	 * Runs a builder call and discards anything it prints, including buffers it opened and left open (Elementor renders
+	 * widgets inside its own buffer and can throw before closing it), so nothing reaches the MCP response.
+	 *
+	 * @param callable $call Builder call.
+	 * @return mixed What the call returns.
+	 */
+	private static function quietly( callable $call ) {
+		$level = ob_get_level();
+		ob_start();
+		try {
+			return $call();
+		} finally {
+			Buffers::discard( $level );
 		}
 	}
 

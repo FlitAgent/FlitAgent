@@ -122,6 +122,9 @@ final class RollbackTool implements WriteTool {
 
 		$rollback = Canonical::decode( $receipt['rollback_json'] );
 		$tool     = Gateway::ROLLBACK_TOOL === $receipt['tool'] ? null : call_user_func( $this->find_tool, (string) $receipt['tool'] );
+		if ( Rollback::is_restorable( $rollback ) && Gateway::ROLLBACK_TOOL !== $receipt['tool'] && null === $tool ) {
+			return Assessment::prohibited( 'no_rollback', sprintf( 'Receipt %s was made by %s, which is not available on this site in this version of FlitAgent, so it cannot be rolled back here.', $id, (string) $receipt['tool'] ) );
+		}
 		if ( ! Rollback::is_restorable( $rollback ) || ! $tool instanceof Reversible ) {
 			return Assessment::prohibited( 'no_rollback', sprintf( 'Receipt %s has no rollback.', $id ) );
 		}

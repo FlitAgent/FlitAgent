@@ -62,7 +62,7 @@ final class OrderList implements Tool {
 		return Definition::read_only(
 			$this->name(),
 			'List FlitAgent WooCommerce orders',
-			'lists WooCommerce orders, newest first: id, number, status, date created, total, currency, item count, payment method and the customer\'s user id. Customer names and emails are always redacted. Filter by status and by creation date (after, before as YYYY-MM-DD); paginate with page and per_page (default 20, at most 100). total is the number of matching orders. Read-only.',
+			'lists WooCommerce orders, newest first: id, number, status, date created, total, currency, line_items (the number of order lines) and item_quantity (the total quantity across them), payment method and the customer\'s user id. Customer names and emails are always redacted. Filter by status and by creation date (after, before as YYYY-MM-DD); paginate with page and per_page (default 20, at most 100). total is the number of matching orders. Read-only.',
 			array(
 				'status'   => array(
 					'type' => 'string',

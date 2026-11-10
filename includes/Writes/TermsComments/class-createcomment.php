@@ -9,6 +9,7 @@ namespace FlitAgent\Writes\TermsComments;
 
 use FlitAgent\Mcp\ToolError;
 use FlitAgent\Writes\Assessment;
+use FlitAgent\Writes\Content\Posts;
 use FlitAgent\Writes\Definition;
 use FlitAgent\Writes\Outcome;
 use FlitAgent\Writes\Reversible;
@@ -119,7 +120,7 @@ final class CreateComment implements WriteTool, Reversible {
 			return Assessment::prohibited( 'not_found', sprintf( 'Post %d was not found or you cannot comment on it.', $post_id ) );
 		}
 		if ( 'publish' !== $post->post_status ) {
-			return Assessment::prohibited( 'not_supported', sprintf( 'Post %d is not published (status: %s), so FlitAgent does not comment on it.', $post_id, $post->post_status ) );
+			return Assessment::prohibited( 'not_supported', sprintf( 'Post %d is not published (status: %s), so FlitAgent does not comment on it.', $post_id, Posts::status_word( (string) $post->post_status ) ) );
 		}
 		if ( ! comments_open( $post_id ) ) {
 			return Assessment::prohibited( 'comments_closed', sprintf( 'Comments are closed on post %d.', $post_id ) );

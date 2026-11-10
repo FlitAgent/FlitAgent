@@ -8,6 +8,8 @@
 namespace FlitAgent\Writes\Packages\Themes;
 
 use FlitAgent\Mcp\ToolError;
+use FlitAgent\Writes\AdminCode;
+use FlitAgent\Writes\Buffers;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -42,6 +44,7 @@ class Upgrader {
 	 */
 	public static function core_upgrader() {
 		Site::load_admin();
+		AdminCode::load();
 		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 		return new \Theme_Upgrader( new \WP_Ajax_Upgrader_Skin() );
 	}
@@ -60,6 +63,7 @@ class Upgrader {
 		$upgrader = call_user_func( $this->factory );
 		$error    = '';
 		$enabled  = false;
+		$level    = ob_get_level();
 		ob_start();
 		try {
 			if ( $maintenance ) {
@@ -79,11 +83,11 @@ class Upgrader {
 			);
 			$error  = self::error_of( $result, $upgrader );
 		} finally {
-			ob_end_clean();
+			Buffers::discard( $level );
 			if ( ( $enabled || file_exists( $marker ) ) && ! $existed ) {
 				ob_start();
 				$upgrader->maintenance_mode( false );
-				ob_end_clean();
+				Buffers::discard( $level );
 			}
 			wp_clean_themes_cache();
 		}//end try
@@ -100,11 +104,13 @@ class Upgrader {
 	 */
 	public function delete( string $slug ): void {
 		Site::load_admin();
+		AdminCode::load();
+		$level = ob_get_level();
 		ob_start();
 		try {
 			$result = delete_theme( $slug );
 		} finally {
-			ob_end_clean();
+			Buffers::discard( $level );
 			wp_clean_themes_cache();
 		}
 		if ( is_wp_error( $result ) ) {

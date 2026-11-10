@@ -22,7 +22,9 @@ defined( 'ABSPATH' ) || exit;
 /**
  * `update_global_styles`: replaces the `styles` and/or `settings` section of the active theme's user global styles
  * (Site Editor > Styles) through the core global styles controller, after saving a revision of the current styles.
- * Rollback restores that revision. Never auto-approvable: styles are public.
+ * Rollback restores that revision. A theme whose styles were never saved has no such post yet: the first update creates
+ * it the way the Site Editor does (WP_Theme_JSON_Resolver), and rolling that update back deletes it. Never
+ * auto-approvable: styles are public.
  */
 final class UpdateGlobalStyles implements WriteTool, Reversible {
 
@@ -47,7 +49,7 @@ final class UpdateGlobalStyles implements WriteTool, Reversible {
 		return Definition::write(
 			$this->name(),
 			'FlitAgent: update the global styles',
-			'Replaces the styles and/or settings section of the active theme\'s custom global styles (Site Editor > Styles), as theme.json-shaped objects; each given section replaces the whole current section. WordPress drops values theme.json does not allow (reported as stored_verbatim: false). Always returns approval_required; undo with rollback_change.',
+			'Replaces the styles and/or settings section of the active theme\'s custom global styles (Site Editor > Styles), as theme.json-shaped objects; each given section replaces the whole current section. WordPress drops values theme.json does not allow (reported as stored_verbatim: false). When the theme has no custom styles yet, they are created, as saving Styles once in the Site Editor would. Always returns approval_required; undo with rollback_change.',
 			array(
 				'styles'   => array(
 					'type'        => 'object',
@@ -96,7 +98,11 @@ final class UpdateGlobalStyles implements WriteTool, Reversible {
 		if ( $post instanceof Assessment ) {
 			return $post;
 		}
-		$current = self::sections( (int) $post->ID );
+		if ( null === $post && ! self::has_theme_json() ) {
+			// A theme without theme.json does not read user global styles; creating them would change nothing visible.
+			return Assessment::prohibited( 'not_found', sprintf( 'Theme %s has no custom global styles yet; open Styles in the Site Editor and save once to create them.', get_stylesheet() ) );
+		}
+		$current = null === $post ? array_fill_keys( self::SECTIONS, array() ) : self::sections( (int) $post->ID );
 		if ( null === $current ) {
 			return Assessment::prohibited( 'not_found', 'The global styles could not be read; you may not be allowed to edit them.' );
 		}
@@ -108,6 +114,20 @@ final class UpdateGlobalStyles implements WriteTool, Reversible {
 		}
 		if ( $before === $after ) {
 			throw new ToolError( 'The global styles already have those values; nothing to change.' );
+		}
+		if ( null === $post ) {
+			return Assessment::reversible(
+				sprintf( 'Create the custom global styles of theme %s with the given %s.', get_stylesheet(), implode( ' and ', array_keys( $changes ) ) ),
+				array(
+					'before' => $before,
+					'after'  => $after,
+				),
+				array(
+					'fingerprint' => Revisions::fingerprint( null ),
+					'theme'       => (string) get_stylesheet(),
+				),
+				false
+			);
 		}
 		return Assessment::reversible(
 			sprintf( 'Replace the %s of the global styles of theme %s.', implode( ' and ', array_keys( $changes ) ), get_stylesheet() ),
@@ -129,9 +149,13 @@ final class UpdateGlobalStyles implements WriteTool, Reversible {
 	 * @throws ToolError When the styles changed or WordPress refused.
 	 */
 	public function apply( array $args, Assessment $assessment ): Outcome {
-		$post = self::post();
-		if ( $post instanceof Assessment || Revisions::fingerprint( $post ) !== ( $assessment->preconditions()['fingerprint'] ?? '' ) ) {
+		$post          = self::post();
+		$preconditions = $assessment->preconditions();
+		if ( $post instanceof Assessment || Revisions::fingerprint( $post ) !== ( $preconditions['fingerprint'] ?? '' ) || ( null === $post && ( $preconditions['theme'] ?? '' ) !== get_stylesheet() ) ) {
 			throw new ToolError( 'The global styles changed after the request was assessed; nothing was changed.' );
+		}
+		if ( null === $post ) {
+			return self::create( $args );
 		}
 		$id       = (int) $post->ID;
 		$revision = Revisions::save_current( $id );
@@ -143,6 +167,54 @@ final class UpdateGlobalStyles implements WriteTool, Reversible {
 				'before_revision_id' => $revision,
 			),
 			Rollback::make( Rollback::REVISION, 'global_styles', $id, array( 'revision_id' => $revision ) ),
+			array( 'fingerprint' => Revisions::fingerprint( get_post( $id ) ) )
+		);
+	}
+
+	/**
+	 * Creates the active theme's user global styles post as the Site Editor does, then writes through the controller.
+	 *
+	 * @param array<string, mixed> $args Arguments.
+	 * @return Outcome
+	 * @throws ToolError When WordPress did not create a post the theme's styles are read from.
+	 */
+	private static function create( array $args ): Outcome {
+		$theme = (string) get_stylesheet();
+		$id    = (int) \WP_Theme_JSON_Resolver::get_user_global_styles_post_id();
+		$post  = self::find();
+		if ( ! is_object( $post ) || (int) $post->ID !== $id ) {
+			// Core creates the post without its wp_theme term when no user may assign it; nothing would read that post.
+			$orphan = $id > 0 ? get_post( $id ) : null;
+			if ( $orphan && 'wp_global_styles' === $orphan->post_type && self::is_empty( (string) $orphan->post_content ) ) {
+				wp_delete_post( $id, true );
+				self::forget();
+			}
+			throw new ToolError( sprintf( 'WordPress could not create the custom global styles of theme %s; nothing was changed.', esc_textarea( $theme ) ) );
+		}
+		try {
+			Rest::write( 'POST', '/wp/v2/global-styles/' . $id, self::changes( $args ) );
+		} catch ( ToolError $e ) {
+			// The post was created for this write: remove it again, so a failed write leaves no styles behind.
+			wp_delete_post( $id, true );
+			self::forget();
+			throw new ToolError( esc_textarea( rtrim( ToolError::plain( $e ), '.' ) . '; the custom global styles created for this write were removed again.' ) );
+		}
+
+		return new Outcome(
+			array(
+				'post_id'            => $id,
+				'created'            => true,
+				'before_revision_id' => 0,
+			),
+			Rollback::make(
+				Rollback::SNAPSHOT,
+				'global_styles',
+				$id,
+				array(
+					'created' => true,
+					'theme'   => $theme,
+				)
+			),
 			array( 'fingerprint' => Revisions::fingerprint( get_post( $id ) ) )
 		);
 	}
@@ -192,6 +264,17 @@ final class UpdateGlobalStyles implements WriteTool, Reversible {
 		if ( ! $post || 'wp_global_styles' !== $post->post_type ) {
 			return Assessment::prohibited( 'not_found', sprintf( 'The global styles post %d no longer exists.', $id ) );
 		}
+		if ( ! empty( $rollback['refs']['created'] ) ) {
+			return Assessment::reversible(
+				sprintf( 'Remove the custom global styles of theme %s that the write created; the theme\'s own styles apply again.', isset( $rollback['refs']['theme'] ) ? (string) $rollback['refs']['theme'] : '' ),
+				array(
+					'current'  => (string) $post->post_content,
+					'restored' => '(none: the theme\'s own styles)',
+				),
+				array( 'fingerprint' => Revisions::fingerprint( $post ) ),
+				false
+			);
+		}
 		$revision = Revisions::revision( isset( $rollback['refs']['revision_id'] ) ? (int) $rollback['refs']['revision_id'] : 0, $id );
 		if ( null === $revision ) {
 			return Assessment::prohibited( 'revision_missing', 'The revision of the global styles that this rollback would restore no longer exists.' );
@@ -220,6 +303,19 @@ final class UpdateGlobalStyles implements WriteTool, Reversible {
 		if ( Revisions::fingerprint( get_post( $id ) ) !== ( $expected_state['fingerprint'] ?? '' ) ) {
 			throw new ToolError( 'The global styles changed after the rollback was assessed; nothing was restored.' );
 		}
+		if ( ! empty( $rollback['refs']['created'] ) ) {
+			if ( ! wp_delete_post( $id, true ) ) {
+				throw new ToolError( 'WordPress could not delete the custom global styles; nothing was restored.' );
+			}
+			self::forget();
+			return new Outcome(
+				array(
+					'post_id'        => $id,
+					'styles_removed' => true,
+				),
+				Rollback::none()
+			);
+		}
 		Revisions::restore( (int) $rollback['refs']['revision_id'] );
 		return new Outcome(
 			array(
@@ -231,15 +327,29 @@ final class UpdateGlobalStyles implements WriteTool, Reversible {
 	}
 
 	/**
-	 * The active theme's user global styles post, or a refusal.
+	 * The active theme's user global styles post, null when it has none yet, or a refusal.
 	 *
-	 * @return object|Assessment
+	 * @return object|Assessment|null
 	 */
 	private static function post() {
 		$refusal = Menus::refusal();
 		if ( null !== $refusal ) {
 			return $refusal;
 		}
+		$post = self::find();
+		if ( null === $post ) {
+			return null;
+		}
+		$refusal = Revisions::refusal( $post, 'the global styles' );
+		return null === $refusal ? $post : $refusal;
+	}
+
+	/**
+	 * The active theme's user global styles post as core looks it up, or null.
+	 *
+	 * @return object|null
+	 */
+	private static function find() {
 		$theme = (string) get_stylesheet();
 		$posts = get_posts(
 			array(
@@ -259,11 +369,40 @@ final class UpdateGlobalStyles implements WriteTool, Reversible {
 				),
 			)
 		);
-		if ( ! isset( $posts[0] ) ) {
-			return Assessment::prohibited( 'not_found', sprintf( 'Theme %s has no custom global styles yet; open Styles in the Site Editor and save once to create them.', $theme ) );
+		return isset( $posts[0] ) ? $posts[0] : null;
+	}
+
+	/**
+	 * Whether the active theme has theme.json, so its user global styles take effect: wp_theme_has_theme_json() on
+	 * WordPress 6.2+, WP_Theme_JSON_Resolver::theme_has_support() before.
+	 *
+	 * @return bool
+	 */
+	private static function has_theme_json(): bool {
+		if ( function_exists( 'wp_theme_has_theme_json' ) ) {
+			return (bool) wp_theme_has_theme_json();
 		}
-		$refusal = Revisions::refusal( $posts[0], 'the global styles' );
-		return null === $refusal ? $posts[0] : $refusal;
+		return (bool) \WP_Theme_JSON_Resolver::theme_has_support();
+	}
+
+	/**
+	 * Makes core forget the user global styles post id it caches for the request, after that post was deleted.
+	 */
+	private static function forget(): void {
+		if ( method_exists( '\WP_Theme_JSON_Resolver', 'clean_cached_data' ) ) {
+			\WP_Theme_JSON_Resolver::clean_cached_data();
+		}
+	}
+
+	/**
+	 * Whether global styles content holds no styles or settings (what core creates).
+	 *
+	 * @param string $content Post content.
+	 * @return bool
+	 */
+	private static function is_empty( string $content ): bool {
+		$config = json_decode( $content, true );
+		return is_array( $config ) && empty( $config['styles'] ) && empty( $config['settings'] );
 	}
 
 	/**

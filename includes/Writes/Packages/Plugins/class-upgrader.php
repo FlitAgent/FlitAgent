@@ -8,6 +8,8 @@
 namespace FlitAgent\Writes\Packages\Plugins;
 
 use FlitAgent\Mcp\ToolError;
+use FlitAgent\Writes\Buffers;
+use FlitAgent\Writes\AdminCode;
 use FlitAgent\Writes\Ops\ErrorText;
 
 defined( 'ABSPATH' ) || exit;
@@ -56,6 +58,7 @@ final class Upgrader {
 	 */
 	public static function core_upgrader() {
 		Site::load_admin();
+		AdminCode::load();
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
 		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 		return new \Plugin_Upgrader( new \WP_Ajax_Upgrader_Skin() );
@@ -264,6 +267,7 @@ final class Upgrader {
 	 */
 	public function delete( string $plugin ): void {
 		Site::load_admin();
+		AdminCode::load();
 		$result = $this->run(
 			static function () use ( $plugin ) {
 				return delete_plugins( array( $plugin ) );
@@ -296,9 +300,7 @@ final class Upgrader {
 		} catch ( \Throwable $e ) {
 			throw new ToolError( sprintf( '%s failed: %s', esc_textarea( $doing ), esc_textarea( ErrorText::of( $e ) ) ) );
 		} finally {
-			while ( ob_get_level() > $level ) {
-				ob_end_clean();
-			}
+			Buffers::discard( $level );
 			if ( ! $existed && file_exists( $this->maintenance ) ) {
 				wp_delete_file( $this->maintenance );
 			}

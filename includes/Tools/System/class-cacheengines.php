@@ -42,7 +42,6 @@ final class CacheEngines {
 		'breeze'         => array( 'Breeze', self::PAGE, 'constant', 'BREEZE_VERSION' ),
 		'cloudflare'     => array( 'Cloudflare', self::CDN, 'class', 'CF\\WordPress\\Hooks' ),
 		'elementor'      => array( 'Elementor CSS', self::BUILDER, 'class', 'Elementor\\Plugin' ),
-		'beaver_builder' => array( 'Beaver Builder CSS and JS', self::BUILDER, 'class', 'FLBuilderModel' ),
 		'divi'           => array( 'Divi static CSS', self::BUILDER, 'class', 'ET_Core_PageResource' ),
 	);
 

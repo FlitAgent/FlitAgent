@@ -27,6 +27,17 @@ defined( 'ABSPATH' ) || exit;
 final class CreatePost implements WriteTool, Reversible {
 
 	/**
+	 * Each status as the summary says it: "a published page", not "a publish page".
+	 */
+	const STATUS_WORDS = array(
+		'draft'   => 'draft',
+		'pending' => 'pending',
+		'publish' => 'published',
+		'private' => 'private',
+		'future'  => 'scheduled',
+	);
+
+	/**
 	 * Argument => post field.
 	 */
 	const FIELDS = array(
@@ -174,7 +185,7 @@ final class CreatePost implements WriteTool, Reversible {
 			$after['featured_media'] = (int) $args['featured_media'];
 		}
 		$label   = isset( $object->labels->singular_name ) ? strtolower( (string) $object->labels->singular_name ) : $type;
-		$summary = sprintf( 'Create a %s %s "%s".', $status, $label, Posts::short( isset( $args['title'] ) ? (string) $args['title'] : '' ) );
+		$summary = sprintf( 'Create a %s %s "%s".', self::STATUS_WORDS[ $status ] ?? $status, $label, Posts::short( isset( $args['title'] ) ? (string) $args['title'] : '' ) );
 		$preview = array(
 			'post_type' => $type,
 			'before'    => array(),
@@ -265,7 +276,7 @@ final class CreatePost implements WriteTool, Reversible {
 	 * @return Assessment
 	 */
 	public function assess_rollback( array $rollback ): Assessment {
-		return Trashing::assess_trash( isset( $rollback['target']['id'] ) ? (int) $rollback['target']['id'] : 0, 'Undo the creation: move to the trash', true );
+		return Trashing::assess_trash( isset( $rollback['target']['id'] ) ? (int) $rollback['target']['id'] : 0, 'Undo the creation: move %s to the trash', true );
 	}
 
 	/**

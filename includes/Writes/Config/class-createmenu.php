@@ -15,6 +15,7 @@ use FlitAgent\Writes\Outcome;
 use FlitAgent\Writes\Reversible;
 use FlitAgent\Writes\Risk;
 use FlitAgent\Writes\Rollback;
+use FlitAgent\Writes\Summary;
 use FlitAgent\Writes\WriteTool;
 
 defined( 'ABSPATH' ) || exit;
@@ -176,7 +177,7 @@ final class CreateMenu implements WriteTool, Reversible {
 		}
 		$items = (array) Menus::items( $id );
 		return Assessment::reversible(
-			sprintf( 'Delete menu "%s" (%d), which the write created (%d items now).', $menu['name'], $id, count( $items ) ),
+			sprintf( 'Delete menu "%s" (%d), which the write created (%s now).', $menu['name'], $id, Summary::count( count( $items ), 'item', 'items' ) ),
 			array(
 				'current'  => array(
 					'menu'  => (string) $menu['name'],

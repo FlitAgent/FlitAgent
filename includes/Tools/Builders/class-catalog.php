@@ -24,7 +24,6 @@ final class Catalog {
 		'elementor'  => array( 'class', 'Elementor\\Plugin' ),
 		'bricks'     => array( 'class', 'Bricks\\Database' ),
 		'breakdance' => array( 'function', 'Breakdance\\Data\\get_meta' ),
-		'beaver'     => array( 'class', 'FLBuilderModel' ),
 	);
 
 	/**
@@ -81,10 +80,8 @@ final class Catalog {
 				return array( new ElementorWidgets(), new ElementorWidgetSchema(), new ElementorStyleSchema(), new ElementorPage() );
 			case 'bricks':
 				return array( new BricksElements(), new BricksPage() );
-			case 'breakdance':
-				return array( new BreakdanceElements(), new BreakdancePage() );
 			default:
-				return array( new BeaverModules(), new BeaverModuleSchema(), new BeaverPage() );
+				return array( new BreakdanceElements(), new BreakdancePage() );
 		}
 	}
 }

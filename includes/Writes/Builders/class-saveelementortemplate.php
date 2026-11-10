@@ -46,6 +46,23 @@ final class SaveElementorTemplate extends ElementorSave {
 	}
 
 	/**
+	 * A template can be a single widget (Elementor Pro's global widget templates).
+	 */
+	protected function top_level_widgets_allowed(): bool {
+		return true;
+	}
+
+	/**
+	 * An elementor_library post is an "Elementor template" in summaries.
+	 *
+	 * @param object $post Post.
+	 * @return string
+	 */
+	protected function kind_of( $post ): string {
+		return 'Elementor template';
+	}
+
+	/**
 	 * Only templates.
 	 *
 	 * @param object $post Post.

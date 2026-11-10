@@ -44,7 +44,7 @@ AI apps can propose changes to posts and pages, terms and comments, media, users
 
 = WooCommerce, page builders and WordPress abilities =
 
-AI apps can read WooCommerce products, orders and a store overview (order counts and revenue). FlitAgent has no tools that change orders, prices or stock; products, product categories and reviews can be changed through the general content tools, with your approval. Elementor and Beaver Builder layouts can be read, and saved after your approval, when the builder is active on the site. On WordPress 6.9 or later, abilities that WordPress and other plugins register can be listed and run; running one waits for your approval unless it is declared read-only.
+AI apps can read WooCommerce products, orders and a store overview (order counts and revenue). FlitAgent has no tools that change orders, prices or stock; products, product categories and reviews can be changed through the general content tools, with your approval, except a product's title, description and excerpt. Elementor layouts can be read, and saved after your approval, when Elementor is active on the site. On WordPress 6.9 or later, abilities that WordPress and other plugins register can be listed and run; running one waits for your approval unless it is declared read-only.
 
 = Plugin, theme and core updates, checked afterwards =
 
@@ -78,7 +78,7 @@ FlitAgent > Connect shows the connection (account, access, when flitagent.com la
 * Changes to content, media, users, settings, menus, widgets, templates and styles, with approval
 * Plugin, theme and core installs and updates, always with approval; the home page is checked after updates
 * WooCommerce products, orders and store overview (read)
-* Elementor and Beaver Builder layouts
+* Elementor layouts
 * WordPress abilities (WordPress 6.9 or later)
 * Before-and-after preview for every change
 * Plans: several changes, one approval
@@ -156,11 +156,11 @@ FlitAgent never lets an agent's user change, demote or grant capabilities to som
 
 = Does it work with WooCommerce? =
 
-AI apps can read products, orders and a store overview (order counts and revenue). FlitAgent has no tools that change orders, prices or stock. Products, product categories and reviews can be changed through the general content tools, with your approval.
+AI apps can read products, orders and a store overview (order counts and revenue). FlitAgent has no tools that change orders, prices or stock. Products, product categories and reviews can be changed through the general content tools, with your approval, except a product's title, description and excerpt.
 
-= Does it work with Elementor and Beaver Builder? =
+= Does it work with Elementor? =
 
-Elementor and Beaver Builder layouts can be read, and saved after your approval, when the builder is active on the site.
+Elementor layouts can be read, and saved after your approval, when Elementor is active on the site.
 
 = Can I connect more than one site? =
 

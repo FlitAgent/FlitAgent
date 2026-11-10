@@ -57,7 +57,7 @@ final class InstallPlugin implements WriteTool, Reversible {
 		return Definition::write(
 			$this->name(),
 			'FlitAgent: install a plugin from WordPress.org',
-			'Installs the latest release of one plugin from the WordPress.org directory by its slug (e.g. "classic-editor", as search_plugin_directory shows it), and leaves it inactive (use activate_plugin afterwards). Only WordPress.org is a source: no ZIP URLs or uploads. Always needs an administrator\'s approval (returns approval_required with the version, requirements, links and backup status). Refused when the plugin is already installed, the release needs a newer WordPress or PHP, this site disallows file changes or needs FTP credentials, or on multisite. rollback_change deletes it again while it is still inactive (its uninstall routine runs).',
+			'Installs the latest release of one plugin from the WordPress.org directory by its slug (e.g. "classic-editor", as search_plugin_directory shows it), and leaves it inactive (use activate_plugin afterwards). Only WordPress.org is a source: no ZIP URLs or uploads. As in wp-admin, WordPress then also installs available translation updates and checks WordPress.org for updates. Always needs an administrator\'s approval (returns approval_required with the version, requirements, links and backup status). Refused when the plugin is already installed, the release needs a newer WordPress or PHP, this site disallows file changes or needs FTP credentials, or on multisite. rollback_change deletes it again while it is inactive and still at the installed version (its uninstall routine runs).',
 			array(
 				'slug' => array(
 					'type'        => 'string',
@@ -136,7 +136,7 @@ final class InstallPlugin implements WriteTool, Reversible {
 				'requires'    => Directory::requirements( $release['requires'], $release['requires_php'] ),
 				'links'       => Directory::links( $slug ),
 				'backup'      => Backups::status(),
-				'cannot_undo' => 'Rolling back deletes the plugin, which runs its uninstall routine; once it has been activated or updated, FlitAgent will not delete it for you.',
+				'cannot_undo' => 'Rolling back deletes the plugin, which runs its uninstall routine. FlitAgent refuses that rollback while the plugin is active, or once its version is no longer the one installed here.',
 			),
 			array(
 				'slug'    => $slug,

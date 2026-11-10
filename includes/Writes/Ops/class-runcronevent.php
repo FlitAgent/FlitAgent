@@ -172,7 +172,8 @@ final class RunCronEvent implements WriteTool {
 			$next = self::next_time( $hook, $event['args'] );
 		}
 
-		$level = ob_get_level();
+		$ran_at = time();
+		$level  = ob_get_level();
 		ob_start();
 		try {
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- runs the scheduled event's own hook, as wp-cron.php does.
@@ -185,11 +186,12 @@ final class RunCronEvent implements WriteTool {
 
 		return new Outcome(
 			array(
-				'hook'         => $hook,
-				'ran'          => true,
-				'ran_at'       => gmdate( 'c', $timestamp ),
-				'next_run'     => null === $next ? null : gmdate( 'c', $next ),
-				'output_bytes' => strlen( $output ),
+				'hook'          => $hook,
+				'ran'           => true,
+				'ran_at'        => gmdate( 'c', $ran_at ),
+				'scheduled_for' => gmdate( 'c', $timestamp ),
+				'next_run'      => null === $next ? null : gmdate( 'c', $next ),
+				'output_bytes'  => strlen( $output ),
 			),
 			Rollback::none()
 		);

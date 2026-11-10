@@ -102,7 +102,7 @@ final class ElementorWidgets implements Tool {
 		foreach ( $registry['widgets'] as $slug => $widget ) {
 			$items[] = array(
 				'slug'       => (string) $slug,
-				'title'      => (string) $widget->get_title(),
+				'title'      => self::title( $widget, (string) $slug ),
 				'categories' => array_values( (array) $widget->get_categories() ),
 				'is_pro'     => ElementorSchema::is_pro( $widget ),
 				'kind'       => 'widget',
@@ -116,7 +116,7 @@ final class ElementorWidgets implements Tool {
 			}
 			$items[] = array(
 				'slug'       => (string) $slug,
-				'title'      => (string) $element->get_title(),
+				'title'      => self::title( $element, (string) $slug ),
 				'categories' => $atomic ? array( 'v4-elements', 'structural' ) : array( 'structural' ),
 				'is_pro'     => ElementorSchema::is_pro( $element ),
 				'kind'       => 'element',
@@ -131,5 +131,17 @@ final class ElementorWidgets implements Tool {
 				'items'             => $items,
 			)
 		);
+	}
+
+	/**
+	 * The title, or the name when Elementor gives none (its common, common-base and common-optimized widgets).
+	 *
+	 * @param object $item Widget or element.
+	 * @param string $name Registered name.
+	 * @return string
+	 */
+	private static function title( $item, string $name ): string {
+		$title = trim( (string) $item->get_title() );
+		return '' === $title ? $name : $title;
 	}
 }

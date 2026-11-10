@@ -47,7 +47,7 @@ final class SearchFiles extends FileTool {
 		return array(
 			'name'         => $this->name(),
 			'title'        => 'Search theme or plugin files with FlitAgent',
-			'description'  => 'From the FlitAgent WordPress plugin: finds a plain-text query (not a regular expression) in the text files of the active theme, its parent theme, or the themes, plugins or mu-plugins directory, and returns each matching line with its relative path and line number. Case-insensitive unless case_sensitive is true. Narrow with path (a subdirectory) and pattern (a glob such as "*.php"). Secret values are redacted before matching, so they never match or show. Skips files over 512 KB, binary files, hidden files, vendor, node_modules, symbolic links and secret files. Requires an administrator login.',
+			'description'  => 'From the FlitAgent WordPress plugin: finds a plain-text query (not a regular expression) in the text files of the active theme, its parent theme, or the themes, plugins or mu-plugins directory, and returns each matching line with its relative path and line number. Case-insensitive unless case_sensitive is true. Narrow with path (a subdirectory) and pattern (a glob: "*.php" matches file names at any depth; a pattern with "/" matches the path from the root). Secret values are redacted before matching, so they never match or show. Skips files over 512 KB, binary files, hidden files, vendor, node_modules, symbolic links and secret files. Requires an administrator login.',
 			'inputSchema'  => array(
 				'type'                 => 'object',
 				'properties'           => array(
@@ -65,7 +65,7 @@ final class SearchFiles extends FileTool {
 					'pattern'        => array(
 						'type'        => 'string',
 						'maxLength'   => 200,
-						'description' => 'Glob on the file path relative to the root, e.g. "*.php" (top level) or "*/*.php". "*" does not cross "/".',
+						'description' => 'Glob, case-insensitive. Without "/" it matches the file name at any depth, e.g. "*.php". With "/" it matches the whole file path relative to the root (not to path), and "*" does not cross "/", e.g. "templates/*.html".',
 					),
 					'case_sensitive' => array(
 						'type'    => 'boolean',
@@ -142,7 +142,7 @@ final class SearchFiles extends FileTool {
 			$directory,
 			true,
 			static function ( string $path, string $real, bool $is_dir ) use ( $query, $pattern, $case_sensitive, $limit, $max_files, &$matches, &$searched, &$hit_limit ): bool {
-				if ( $is_dir || ! Sandbox::is_text_type( $path ) || ( null !== $pattern && ! fnmatch( $pattern, $path, FNM_PATHNAME | FNM_CASEFOLD ) ) ) {
+				if ( $is_dir || ! Sandbox::is_text_type( $path ) || ( null !== $pattern && ! ListFiles::pattern_matches( $pattern, $path ) ) ) {
 					return true;
 				}
 				if ( $searched >= $max_files ) {

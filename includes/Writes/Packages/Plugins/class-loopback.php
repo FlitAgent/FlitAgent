@@ -40,13 +40,17 @@ final class Loopback {
 	 * @return array<string, string>
 	 */
 	public static function check( string $what, string $hint = '' ): array {
+		$url      = home_url( '/' );
 		$response = wp_safe_remote_get(
-			home_url( '/' ),
+			$url,
 			array(
 				'timeout'             => self::TIMEOUT,
 				'redirection'         => 0,
 				'limit_response_size' => self::MAX_BYTES,
 				'cookies'             => array(),
+				// TLS verified as core's own loopback requests do it (off by default, so a self-signed certificate works).
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core's own loopback filter, applied as core's loopback requests apply it.
+				'sslverify'           => apply_filters( 'https_local_ssl_verify', false, $url ),
 				'user-agent'          => 'FlitAgent/' . FLITAGENT_VERSION . ' (plugin update check)',
 			)
 		);

@@ -114,6 +114,53 @@ final class Menus {
 	}
 
 	/**
+	 * Re-creates a menu item from snapshot fields through the core menu-items controller. Core's REST route refuses a
+	 * menu_order below 1, so an item stored at 0 is created without one (core's schema default puts it at 1), then gets its menu_order
+	 * through wp_update_post(), as update_menu_item writes it.
+	 *
+	 * @param array<string, mixed> $fields Item fields.
+	 * @return array{0: int, 1: bool} The new item id, and whether its menu_order is the one in the fields.
+	 * @throws ToolError When WordPress refused to create the item.
+	 */
+	public static function create_item( array $fields ): array {
+		$order = isset( $fields['menu_order'] ) ? (int) $fields['menu_order'] : null;
+		if ( null !== $order && $order < 1 ) {
+			unset( $fields['menu_order'] );
+		}
+		$created = Rest::write( 'POST', '/wp/v2/menu-items', $fields );
+		$id      = isset( $created['id'] ) ? (int) $created['id'] : 0;
+		if ( null === $order || $order >= 1 || $id <= 0 ) {
+			return array( $id, true );
+		}
+		try {
+			return array( $id, self::set_order( $id, $order ) );
+		} catch ( \Throwable $e ) {
+			unset( $e );
+			// The item exists; only its order could not be written, which the caller reports.
+			return array( $id, false );
+		}
+	}
+
+	/**
+	 * Sets one item's menu_order, 0 included. It goes through wp_update_post() with that field alone: the REST route
+	 * refuses a menu_order below 1.
+	 *
+	 * @param int $id    Item id.
+	 * @param int $order menu_order.
+	 * @return bool
+	 */
+	public static function set_order( int $id, int $order ): bool {
+		$result = wp_update_post(
+			array(
+				'ID'         => $id,
+				'menu_order' => $order,
+			),
+			true
+		);
+		return ! is_wp_error( $result ) && (int) $result > 0;
+	}
+
+	/**
 	 * The fields of an item a snapshot keeps.
 	 *
 	 * @param array<string, mixed> $item Item from REST.
@@ -233,7 +280,7 @@ final class Menus {
 
 	/**
 	 * Gives a location to a menu (or to none) through the menus controller: the new menu's `locations` gains it, or the
-	 * current owner's loses it.
+	 * current owner's loses it. The menu's name and description are sent unchanged, so the update keeps them.
 	 *
 	 * @param string $location Location slug.
 	 * @param int    $menu_id  Menu id, or 0 for none.
@@ -251,7 +298,16 @@ final class Menus {
 		}
 		$locations = isset( $menu['locations'] ) ? (array) $menu['locations'] : array();
 		$locations = $menu_id > 0 ? array_values( array_unique( array_merge( $locations, array( $location ) ) ) ) : array_values( array_diff( $locations, array( $location ) ) );
-		Rest::write( 'POST', '/wp/v2/menus/' . $target, array( 'locations' => $locations ) );
+		// Core's menu update stores `description ?? ''`, so the menu's own name and description are sent back with it.
+		Rest::write(
+			'POST',
+			'/wp/v2/menus/' . $target,
+			array(
+				'name'        => (string) ( $menu['name'] ?? '' ),
+				'description' => (string) ( $menu['description'] ?? '' ),
+				'locations'   => $locations,
+			)
+		);
 	}
 
 	/**

@@ -83,7 +83,7 @@ final class DeletePostPermanently implements WriteTool {
 			return $post;
 		}
 		if ( 'trash' !== $post->post_status ) {
-			return Assessment::prohibited( 'not_in_trash', sprintf( 'Post %d is not in the trash (status: %s); move it there with trash_post first.', $post_id, $post->post_status ) );
+			return Assessment::prohibited( 'not_in_trash', sprintf( 'Post %d is not in the trash (status: %s); move it there with trash_post first.', $post_id, Posts::status_word( (string) $post->post_status ) ) );
 		}
 
 		$revisions = count( wp_get_post_revisions( $post_id ) );

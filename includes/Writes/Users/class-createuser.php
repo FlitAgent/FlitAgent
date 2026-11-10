@@ -15,6 +15,7 @@ use FlitAgent\Writes\Outcome;
 use FlitAgent\Writes\Reversible;
 use FlitAgent\Writes\Risk;
 use FlitAgent\Writes\Rollback;
+use FlitAgent\Writes\Summary;
 use FlitAgent\Writes\WriteTool;
 
 defined( 'ABSPATH' ) || exit;
@@ -154,7 +155,7 @@ final class CreateUser implements WriteTool, Reversible {
 			$after['administrator_capabilities'] = implode( ', ', $admin_caps );
 		}
 
-		$summary       = sprintf( 'Create user "%s" <%s> with role %s; WordPress emails them a link to set their password.', $login, $email, $role );
+		$summary       = sprintf( 'Create user "%s" (%s) with role %s; WordPress emails them a link to set their password.', $login, $email, $role );
 		$preview       = array(
 			'before' => array(),
 			'after'  => $after,
@@ -265,7 +266,7 @@ final class CreateUser implements WriteTool, Reversible {
 		}
 		$posts = array_sum( Site::post_counts( $user_id ) );
 		if ( $posts > 0 ) {
-			return Assessment::prohibited( 'owns_content', sprintf( 'User %d now owns %d posts, so rolling back would delete them. Use delete_user with a reassign target instead.', $user_id, $posts ) );
+			return Assessment::prohibited( 'owns_content', sprintf( 'User %d now owns %s, so rolling back would delete %s. Use delete_user with a reassign target instead.', $user_id, Summary::count( $posts, 'post', 'posts' ), 1 === $posts ? 'it' : 'them' ) );
 		}
 		$refusal = Site::lockout( array(), null, array( $user_id ) ) ?? Site::outrank_refusal( $user );
 		if ( null !== $refusal ) {

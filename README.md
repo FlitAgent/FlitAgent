@@ -49,7 +49,7 @@ FlitAgent needs the flitagent.com service and a free flitagent.com account. Your
 | Plugins, themes and core | `list_plugins`, `list_themes`, `search_plugin_directory`, `install_plugin`, `update_plugin`, `activate_plugin`, `switch_theme`, `update_core` |
 | Site configuration | `get_option`, `update_option`, `set_theme_mod`, `update_custom_css`, `set_permalink_structure`, `create_menu`, `add_menu_item`, `update_widget`, `update_template`, `update_global_styles` |
 | Operations | `get_cache_info`, `flush_object_cache`, `purge_page_cache`, `list_cron_events`, `run_cron_event`, `delete_expired_transients`, `flush_rewrite_rules` |
-| Page builders | `get_elementor_page`, `get_bricks_page`, `get_breakdance_page`, `get_beaver_page`, `regenerate_builder_css` |
+| Page builders | `get_elementor_page`, `get_bricks_page`, `get_breakdance_page`, `regenerate_builder_css` |
 | WooCommerce (read tools) | `get_store_overview`, `list_orders`, `list_products` |
 | Files (read only) | `list_files`, `read_file`, `search_files` |
 | Approvals and receipts | `submit_plan`, `apply_change`, `get_change`, `list_receipts`, `rollback_change` |

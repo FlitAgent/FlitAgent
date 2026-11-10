@@ -150,15 +150,12 @@ final class CoreChecksums implements Tool {
 		$version = (string) $wp_version;
 		$locale  = (string) get_locale();
 
-		$checksums = self::checksums( $version, $locale );
-		if ( null === $checksums && 'en_US' !== $locale ) {
-			// Localized packages often have no checksums; en_US covers everything but translated readme/license files.
-			$locale    = 'en_US';
-			$checksums = self::checksums( $version, $locale );
+		$found = self::for_site( $version, $locale );
+		if ( null === $found ) {
+			throw new ToolError( sprintf( 'WordPress.org has no checksums for WordPress %s (en_US), or could not be reached. Development and pre-release versions have none.', esc_textarea( $version ) ) );
 		}
-		if ( null === $checksums ) {
-			throw new ToolError( sprintf( 'WordPress.org has no checksums for WordPress %s (%s), or could not be reached. Development and pre-release versions have none.', esc_textarea( $version ), esc_textarea( $locale ) ) );
-		}
+		$locale    = $found['locale'];
+		$checksums = $found['checksums'];
 
 		$manifest = array();
 		foreach ( $checksums as $path => $md5 ) {
@@ -191,6 +188,24 @@ final class CoreChecksums implements Tool {
 			'files'         => $result['files'],
 			'truncated'     => $result['truncated'],
 		);
+	}
+
+	/**
+	 * Fetches the checksums for the site's version and locale, falling back to en_US: localized packages often have
+	 * no checksums, and en_US covers everything but translated readme/license files.
+	 *
+	 * @param string $version WordPress version.
+	 * @param string $locale  Site locale.
+	 * @return array{locale: string, checksums: array<string, mixed>}|null The locale used and its relative path => MD5
+	 *                                                                     map, or null if WordPress.org has none.
+	 */
+	public static function for_site( string $version, string $locale ) {
+		$checksums = self::checksums( $version, $locale );
+		if ( null === $checksums && 'en_US' !== $locale ) {
+			$locale    = 'en_US';
+			$checksums = self::checksums( $version, $locale );
+		}
+		return null === $checksums ? null : compact( 'locale', 'checksums' );
 	}
 
 	/**

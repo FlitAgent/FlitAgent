@@ -16,8 +16,8 @@ use FlitAgent\Writes\Outcome;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * `regenerate_builder_css`: clears the generated CSS of every active page builder that has an API for it (Elementor,
- * Beaver Builder, Divi), so it is regenerated on the next page view.
+ * `regenerate_builder_css`: clears the generated CSS of every active page builder that has an API for it (Elementor
+ * and Divi), so it is regenerated on the next page view.
  */
 final class RegenerateBuilderCss extends EngineTool {
 
@@ -37,7 +37,7 @@ final class RegenerateBuilderCss extends EngineTool {
 		return Definition::write(
 			$this->name(),
 			'FlitAgent: regenerate page-builder CSS',
-			'Clears the generated CSS files of each active page builder through its own API (Elementor "Regenerate CSS & Data", Beaver Builder asset cache, Divi static CSS), so they are rebuilt on the next page view; fixes stale styling after a builder change. Reports each builder as purged or failed. Bricks and Breakdance are not supported. Applied at once if an administrator enabled auto-approve for it; otherwise returns approval_required. Nothing to roll back: the CSS regenerates.',
+			'Clears the generated CSS files of each active page builder through its own API (Elementor "Regenerate CSS & Data", Divi static CSS), so they are rebuilt on the next page view; fixes stale styling after a builder change. Reports each builder as purged or failed. Bricks and Breakdance are not supported. Applied at once if an administrator enabled auto-approve for it; otherwise returns approval_required. Nothing to roll back: the CSS regenerates.',
 			array(),
 			array(),
 			$this->tiers(),
@@ -59,7 +59,7 @@ final class RegenerateBuilderCss extends EngineTool {
 		}
 		$engines = $this->engines->detected( CacheEngines::BUILDER );
 		if ( array() === $engines ) {
-			throw new ToolError( 'No supported page builder is active (supported: Elementor, Beaver Builder, Divi).' );
+			throw new ToolError( 'No supported page builder is active (supported: Elementor, Divi).' );
 		}
 		return Assessment::reversible(
 			sprintf( 'Clear and regenerate the generated CSS of: %s.', implode( ', ', array_map( array( CacheEngines::class, 'label' ), $engines ) ) ),

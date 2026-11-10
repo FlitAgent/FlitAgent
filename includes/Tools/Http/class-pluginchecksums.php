@@ -30,6 +30,19 @@ final class PluginChecksums implements Tool {
 	const SOFT_CHANGE_FILES = array( 'readme.txt', 'readme.md' );
 
 	/**
+	 * Single-file plugins WordPress bundles, by file slug: the plugin Name header that identifies it, and its path in
+	 * core's own checksums. Core's hello.php is not the file the WordPress.org `hello-dolly` plugin ships, so, like
+	 * WP-CLI, it is checked against core's checksums for this WordPress version. Another plugin's root hello.php keeps
+	 * its own slug, and Hello Dolly installed as a `hello-dolly` folder is checked as that WordPress.org plugin.
+	 */
+	const CORE_BUNDLED = array(
+		'hello' => array(
+			'name' => 'Hello Dolly',
+			'path' => 'wp-content/plugins/hello.php',
+		),
+	);
+
+	/**
 	 * Plugins folder.
 	 *
 	 * @var string|null
@@ -81,7 +94,7 @@ final class PluginChecksums implements Tool {
 		return array(
 			'name'         => $this->name(),
 			'title'        => 'Verify plugin files with FlitAgent',
-			'description'  => 'From the FlitAgent WordPress plugin: checks installed plugin files against the checksums WordPress.org publishes for each plugin version (like wp plugin verify-checksums). Returns per plugin whether it verifies, and the relative paths of modified, missing or extra files. readme files are skipped. Plugins not on WordPress.org are reported as unavailable. Never returns file contents. Contacts downloads.wordpress.org once per plugin. Requires an administrator login.',
+			'description'  => 'From the FlitAgent WordPress plugin: checks installed plugin files against the checksums WordPress.org publishes for each plugin version (like wp plugin verify-checksums). Returns per plugin whether it verifies, and the relative paths of modified, missing or extra files. readme files are skipped. The Hello Dolly that WordPress bundles (hello.php) is checked against the checksums of WordPress core, as WP-CLI does. Plugins not on WordPress.org are reported as unavailable. Never returns file contents. Contacts WordPress.org once per plugin. Requires an administrator login.',
 			'inputSchema'  => array(
 				'type'                 => 'object',
 				'properties'           => array(
@@ -142,6 +155,7 @@ final class PluginChecksums implements Tool {
 					'file'    => $file,
 					'single'  => $single,
 					'version' => isset( $data['Version'] ) ? (string) $data['Version'] : '',
+					'name'    => isset( $data['Name'] ) ? (string) $data['Name'] : '',
 				);
 			}
 		}
@@ -151,7 +165,13 @@ final class PluginChecksums implements Tool {
 
 		$results = array();
 		foreach ( $plugins as $key => $plugin ) {
-			$results[] = $this->verify( (string) $key, $plugin['file'], $plugin['single'], $plugin['version'] );
+			$key = (string) $key;
+			if ( $plugin['single'] && isset( self::CORE_BUNDLED[ $key ] ) && self::CORE_BUNDLED[ $key ]['name'] === $plugin['name'] ) {
+				$manifest = self::core_manifest( basename( $plugin['file'] ), self::CORE_BUNDLED[ $key ]['path'] );
+			} else {
+				$manifest = '' === $plugin['version'] ? null : self::manifest( $key, $plugin['version'] );
+			}
+			$results[] = $this->verify( $key, $plugin['file'], $plugin['single'], $plugin['version'], $manifest );
 		}
 
 		return array( 'plugins' => $results );
@@ -160,14 +180,14 @@ final class PluginChecksums implements Tool {
 	/**
 	 * Verifies one plugin.
 	 *
-	 * @param string $slug    Slug.
-	 * @param string $file    Plugin file relative to the plugins folder.
-	 * @param bool   $single  Whether it is a single-file plugin in the plugins folder root.
-	 * @param string $version Installed version.
+	 * @param string                       $slug    Slug.
+	 * @param string                       $file    Plugin file relative to the plugins folder.
+	 * @param bool                         $single  Whether it is a single-file plugin in the plugins folder root.
+	 * @param string                       $version  Installed version.
+	 * @param array<string, string[]>|null $manifest Relative path => MD5 hashes, or null if WordPress.org has none.
 	 * @return array<string, mixed>
 	 */
-	private function verify( string $slug, string $file, bool $single, string $version ): array {
-		$manifest = '' === $version ? null : self::manifest( $slug, $version );
+	private function verify( string $slug, string $file, bool $single, string $version, $manifest ): array {
 		if ( null === $manifest ) {
 			return array(
 				'slug'      => $slug,
@@ -209,6 +229,23 @@ final class PluginChecksums implements Tool {
 			'files'     => $result['files'],
 			'truncated' => $result['truncated'],
 		);
+	}
+
+	/**
+	 * The manifest of a single-file plugin WordPress bundles, from core's checksums for this version and locale.
+	 *
+	 * @param string $file      The plugin's file name in the plugins folder root.
+	 * @param string $core_path Its path in core's checksums.
+	 * @return array<string, string[]>|null File name => MD5 hashes, or null if core's checksums do not list it.
+	 */
+	private static function core_manifest( string $file, string $core_path ) {
+		global $wp_version;
+		$found = CoreChecksums::for_site( (string) $wp_version, (string) get_locale() );
+		if ( null === $found || ! isset( $found['checksums'][ $core_path ] ) ) {
+			return null;
+		}
+		$hashes = FileChecksums::md5_list( $found['checksums'][ $core_path ] );
+		return array() === $hashes ? null : array( $file => $hashes );
 	}
 
 	/**

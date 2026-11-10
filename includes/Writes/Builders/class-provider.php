@@ -57,11 +57,8 @@ final class Provider implements \FlitAgent\Tools\Provider {
 				case 'bricks':
 					$tools[] = new SaveBricksPage();
 					break;
-				case 'breakdance':
-					$tools[] = new SaveBreakdancePage();
-					break;
 				default:
-					$tools[] = new SaveBeaverPage();
+					$tools[] = new SaveBreakdancePage();
 			}
 		}
 		return $tools;

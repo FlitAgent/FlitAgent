@@ -75,30 +75,42 @@ final class TransientList implements Tool {
 		$pattern        = null === $search ? '%' : Values::like( $wpdb, $search );
 		$use_sitemeta   = $network && is_multisite();
 
+		// Names first, limited, without the timeout rows; then the timeout rows of exactly those names. One query over
+		// both kinds sorted value rows before timeout rows and cut the timeouts off at small limits.
 		if ( $use_sitemeta ) {
-			$sql  = "SELECT meta_key AS option_name, meta_value AS option_value FROM {$wpdb->sitemeta} WHERE site_id = %d AND ( meta_key LIKE %s OR meta_key LIKE %s ) ORDER BY meta_key LIMIT %d";
-			$args = array( (int) $wpdb->siteid, $wpdb->esc_like( $prefix ) . $pattern, $wpdb->esc_like( $timeout_prefix ) . $pattern, $limit * 2 );
+			$select = "SELECT meta_key AS option_name, meta_value AS option_value FROM {$wpdb->sitemeta} WHERE site_id = %d AND ";
+			$column = 'meta_key';
+			$scope  = array( (int) $wpdb->siteid );
 		} else {
-			$sql  = "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s ORDER BY option_name LIMIT %d";
-			$args = array( $wpdb->esc_like( $prefix ) . $pattern, $wpdb->esc_like( $timeout_prefix ) . $pattern, $limit * 2 );
+			$select = "SELECT option_name, option_value FROM {$wpdb->options} WHERE ";
+			$column = 'option_name';
+			$scope  = array();
 		}
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- read-only listing, prepared here.
-		$rows = (array) $wpdb->get_results( $wpdb->prepare( $sql, $args ), ARRAY_A );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, PluginCheck.Security.DirectDB.UnescapedDBParameter -- read-only listing, prepared here with the scope and three values.
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( "{$select}{$column} LIKE %s AND {$column} NOT LIKE %s ORDER BY {$column} LIMIT %d", array_merge( $scope, array( $wpdb->esc_like( $prefix ) . $pattern, $wpdb->esc_like( $timeout_prefix ) . '%', $limit ) ) ), ARRAY_A );
 
-		$values   = array();
-		$timeouts = array();
+		$values = array();
 		foreach ( $rows as $row ) {
-			$key = (string) $row['option_name'];
-			if ( 0 === strpos( $key, $timeout_prefix ) ) {
-				$timeouts[ substr( $key, strlen( $timeout_prefix ) ) ] = $row['option_value'];
-			} elseif ( 0 === strpos( $key, $prefix ) ) {
-				$values[ substr( $key, strlen( $prefix ) ) ] = $row['option_value'];
+			$values[ substr( (string) $row['option_name'], strlen( $prefix ) ) ] = $row['option_value'];
+		}
+
+		$timeouts = array();
+		if ( array() !== $values ) {
+			$names = array();
+			foreach ( array_keys( $values ) as $name ) {
+				$names[] = $timeout_prefix . $name;
+			}
+			$in = implode( ', ', array_fill( 0, count( $names ), '%s' ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter -- read-only, one placeholder per name; $column is a fixed column name.
+			$found = (array) $wpdb->get_results( $wpdb->prepare( "{$select}{$column} IN ({$in})", array_merge( $scope, $names ) ), ARRAY_A );
+			foreach ( $found as $row ) {
+				$timeouts[ substr( (string) $row['option_name'], strlen( $timeout_prefix ) ) ] = $row['option_value'];
 			}
 		}
 
 		$transients = array();
-		foreach ( array_slice( $values, 0, $limit, true ) as $name => $value ) {
+		foreach ( $values as $name => $value ) {
 			$name         = (string) $name;
 			$preview      = Values::preview( $name, $value );
 			$transients[] = array(

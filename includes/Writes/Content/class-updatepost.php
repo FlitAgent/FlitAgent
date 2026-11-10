@@ -718,18 +718,25 @@ final class UpdatePost implements WriteTool, Reversible {
 		if ( $from === $to ) {
 			return '';
 		}
-		$note = sprintf( ' The status changes from %s to %s', $from, $to );
+		$note = sprintf( ' The status changes from %s to %s', Posts::status_word( $from ), Posts::status_word( $to ) );
+		// Only a published post is live; a scheduled one goes live at its date.
+		$leaves = array(
+			'publish' => 'takes it off the live site',
+			'future'  => 'cancels its scheduled publication',
+		);
 		if ( 'private' === $to ) {
-			return $note . ( Posts::is_private( $from )
-				? ', which is not public: only logged-in users who can read private posts will see it.'
-				: ', which takes it off the public site: only logged-in users who can read private posts will see it.' );
+			$private = 'only logged-in users who can read private posts will see it.';
+			if ( 'publish' === $from ) {
+				return $note . ', which takes it off the public site: ' . $private;
+			}
+			return $note . ', which ' . ( $leaves[ $from ] ?? 'is not public' ) . ': ' . $private;
 		}
-		if ( ! Posts::is_private( $to ) ) {
-			return $note . ', which makes it public or scheduled.';
+		if ( 'publish' === $to ) {
+			return $note . ', which makes it public.';
 		}
-		if ( ! Posts::is_private( $from ) ) {
-			return $note . ', which takes it off the live site.';
+		if ( 'future' === $to ) {
+			return $note . ', which schedules it for publication.';
 		}
-		return $note . '.';
+		return $note . ( isset( $leaves[ $from ] ) ? ', which ' . $leaves[ $from ] . '.' : '.' );
 	}
 }

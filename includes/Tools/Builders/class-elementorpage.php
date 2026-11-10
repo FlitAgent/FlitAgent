@@ -33,7 +33,7 @@ final class ElementorPage extends PageTool {
 	 * {@inheritDoc}
 	 */
 	protected function describe(): string {
-		return 'Returns the element tree (containers, sections, columns and widgets with id, elType, widgetType, settings and nested elements), the edit mode ("builder" when Elementor is in use), template type and the Elementor version that saved it.';
+		return 'Returns the element tree (containers, sections, columns and widgets with id, elType, widgetType, settings and nested elements), the edit mode ("builder" when Elementor is in use), template type and the Elementor version that saved it. A layout cleared in Elementor has an empty elements list.';
 	}
 
 	/**
@@ -51,20 +51,23 @@ final class ElementorPage extends PageTool {
 	}
 
 	/**
-	 * Reads the layout fields, or null when the post has no layout for this builder.
+	 * Reads the layout fields, or null when the post has no layout for this builder. A post in Elementor's builder edit
+	 * mode with an empty element list has an empty layout.
 	 *
 	 * @param int                  $post_id Post ID.
 	 * @param array<string, mixed> $extra   Validated extra arguments.
 	 * @return array<string, mixed>|null
 	 */
 	protected function layout( int $post_id, array $extra ): ?array {
-		$elements = Output::json( self::meta( $post_id, '_elementor_data' ) );
-		if ( null === $elements || array() === $elements ) {
+		$elements  = Output::json( self::meta( $post_id, '_elementor_data' ) );
+		$edit_mode = self::meta_string( $post_id, '_elementor_edit_mode' );
+		// A page cleared in Elementor keeps the builder edit mode and stores []: an empty layout, not none.
+		if ( null === $elements || ( array() === $elements && 'builder' !== $edit_mode ) ) {
 			return null;
 		}
 
 		return array(
-			'edit_mode'         => self::meta_string( $post_id, '_elementor_edit_mode' ),
+			'edit_mode'         => $edit_mode,
 			'template_type'     => self::meta_string( $post_id, '_elementor_template_type' ),
 			'elementor_version' => self::meta_string( $post_id, '_elementor_version' ),
 			'elements'          => $elements,

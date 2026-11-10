@@ -64,6 +64,22 @@ final class Gateway {
 	const FAILED = 'The tool failed to run.';
 
 	/**
+	 * Temporary error for a database that was busy or failed before anything was written.
+	 */
+	const BUSY = "The site's database was busy, so nothing was changed. Try again with the same idempotency_key.";
+
+	/**
+	 * BUSY when the key could not be freed either: the same key would answer in_progress for a while.
+	 */
+	const BUSY_NEW_KEY = "The site's database was busy, so nothing was changed. Try again with a new idempotency_key.";
+
+	/**
+	 * Seconds after which an `in_progress` idempotency key whose call left no receipt counts as abandoned (its process
+	 * died or its release failed): longer than any tool run.
+	 */
+	const ABANDONED_AFTER = 900;
+
+	/**
 	 * The refusal of every write while Access for AI tools is Read only. The MCP server gives the same message for a write
 	 * tool called while it is not registered (Plugin::register_rest_routes()).
 	 */
@@ -264,14 +280,14 @@ final class Gateway {
 	}
 
 	/**
-	 * A change set, for its requester (the `get_change` meta-tool).
+	 * A change set, for its requester (the `get_change` meta-tool). Read-only, so a read-scoped app may call it too.
 	 *
 	 * @param array<string, mixed> $args `change_id`.
 	 * @return array<string, mixed>
 	 * @throws ToolError On an unknown change.
 	 */
 	public function get_change( array $args ): array {
-		$this->guard_caller();
+		$this->guard_reviewer();
 		Schema::validate( self::get_change_schema(), $args );
 		$change = $this->visible_change( $args['change_id'] );
 		if ( null === $change ) {
@@ -281,17 +297,14 @@ final class Gateway {
 	}
 
 	/**
-	 * Receipts, newest first, redacted (the `list_receipts` meta-tool).
+	 * Receipts, newest first, redacted (the `list_receipts` meta-tool). Read-only, so a read-scoped app may call it too.
 	 *
 	 * @param array<string, mixed> $args `limit`, `page`, `tool`, `status`.
 	 * @return array<string, mixed>
 	 * @throws ToolError When writes are unavailable, the caller may not use it, or on invalid arguments.
 	 */
 	public function list_receipts( array $args ): array {
-		$this->guard();
-		if ( ! $this->identity->can_write() ) {
-			throw new ToolError( 'Unknown tool' );
-		}
+		$this->guard_reviewer();
 		Schema::validate( self::list_receipts_schema(), $args );
 		$limit = isset( $args['limit'] ) ? $args['limit'] : 20;
 		$page  = isset( $args['page'] ) ? $args['page'] : 1;
@@ -301,7 +314,8 @@ final class Gateway {
 		$has_more = count( $rows ) > $limit;
 		$receipts = array();
 		foreach ( array_slice( $rows, 0, $limit ) as $row ) {
-			$receipts[] = self::receipt_view( $row );
+			$undo       = '' === (string) $row['rolled_back_by'] ? null : $this->store->receipt( (string) $row['rolled_back_by'] );
+			$receipts[] = self::receipt_view( $row, null === $undo ? '' : (string) $undo['status'] );
 		}
 
 		return array(
@@ -533,6 +547,18 @@ final class Gateway {
 	}
 
 	/**
+	 * Refuses callers that may not read changes and receipts (the protected gate; the credential's scope may be read).
+	 *
+	 * @throws ToolError When writes are unavailable or the caller fails the protected gate.
+	 */
+	private function guard_reviewer(): void {
+		$this->guard();
+		if ( ! $this->identity->can_review() ) {
+			throw new ToolError( 'Unknown tool' );
+		}
+	}
+
+	/**
 	 * Refuses callers that may not write.
 	 *
 	 * @throws ToolError When the caller may not write.
@@ -558,29 +584,39 @@ final class Gateway {
 	 * @throws ToolError On conflict or a (replayed) error.
 	 */
 	private function once( string $tool, string $key, string $args_hash, callable $run ): array {
-		$scope    = hash( 'sha256', implode( "\n", array( (string) $this->identity->user_id(), $this->identity->client_id(), $tool, $key ) ) );
-		$existing = $this->store->claim_key( $scope, $args_hash, $this->clock->now() );
+		$scope = hash( 'sha256', implode( "\n", array( (string) $this->identity->user_id(), $this->identity->client_id(), $tool, $key ) ) );
+		try {
+			$existing = $this->store->claim_key( $scope, $args_hash, $this->clock->now() );
+		} catch ( \Throwable $e ) {
+			// The key could be neither claimed nor read: nothing was stored, so the same key works on a later try.
+			throw new ToolError( esc_textarea( self::BUSY ) );
+		}
 
 		if ( null !== $existing ) {
 			if ( ! hash_equals( (string) $existing['args_hash'], $args_hash ) ) {
 				throw new ToolError( 'idempotency_conflict: this idempotency_key was already used with different arguments. Use a new key for a different change.' );
 			}
-			if ( 'done' !== $existing['status'] ) {
+			if ( 'done' === $existing['status'] ) {
+				$stored = Canonical::decode( $existing['response_json'] );
+				if ( isset( $stored['error'] ) ) {
+					throw new ToolError( esc_textarea( (string) $stored['error'] ) );
+				}
+				$stored['replayed'] = true;
+				return $this->replay_note( $stored );
+			}
+			if ( ! $this->take_over( $scope, $key, $existing ) ) {
 				return array( 'status' => 'in_progress' );
 			}
-			$stored = Canonical::decode( $existing['response_json'] );
-			if ( isset( $stored['error'] ) ) {
-				throw new ToolError( esc_textarea( (string) $stored['error'] ) );
-			}
-			$stored['replayed'] = true;
-			return $stored;
 		}
 
 		try {
 			$response = $run();
 		} catch ( ToolError $e ) {
-			// Invalid arguments: nothing was attempted, so the key may be used again.
-			$this->store->release_key( $scope );
+			// Invalid arguments, or a busy database before anything was written: the key may be used again.
+			$plain = ToolError::plain( $e );
+			if ( ! $this->release( $scope ) && 0 === strpos( $plain, self::BUSY ) ) {
+				throw new ToolError( esc_textarea( self::BUSY_NEW_KEY . substr( $plain, strlen( self::BUSY ) ) ) );
+			}
 			throw $e;
 		} catch ( \Throwable $e ) {
 			$response = array( 'error' => self::FAILED );
@@ -591,6 +627,76 @@ final class Gateway {
 			throw new ToolError( esc_textarea( (string) $response['error'] ) );
 		}
 		return $response;
+	}
+
+	/**
+	 * Frees a claimed key, trying once more when the database fails.
+	 *
+	 * @param string $scope Scope.
+	 * @return bool Whether it is free.
+	 */
+	private function release( string $scope ): bool {
+		return $this->store->release_key( $scope ) || $this->store->release_key( $scope );
+	}
+
+	/**
+	 * Takes over an `in_progress` key that was abandoned: claimed at least ABANDONED_AFTER ago, and its call left no
+	 * receipt (a receipt means it wrote, so it must never run again). A younger key is a call still running.
+	 *
+	 * @param string               $scope    Scope.
+	 * @param string               $key      Idempotency key.
+	 * @param array<string, mixed> $existing The key's row.
+	 * @return bool Whether this call may run.
+	 */
+	private function take_over( string $scope, string $key, array $existing ): bool {
+		$claimed_at = (int) ( $existing['created_at'] ?? 0 );
+		$now        = $this->clock->now();
+		if ( $claimed_at <= 0 || $now - $claimed_at < self::ABANDONED_AFTER ) {
+			return false;
+		}
+		$receipts = $this->store->receipts(
+			array(
+				'idempotency_key' => $key,
+				'user_id'         => $this->identity->user_id(),
+				'client_id'       => $this->identity->client_id(),
+			),
+			1,
+			0
+		);
+		return array() === $receipts && $this->store->reclaim_key( $scope, $claimed_at, $now );
+	}
+
+	/**
+	 * A replayed proposal or pending reply, with what became of its change since. The stored reply says nothing was
+	 * changed yet, which is no longer true once the change was approved, applied or rejected.
+	 *
+	 * @param array<string, mixed> $stored Replayed response.
+	 * @return array<string, mixed>
+	 */
+	private function replay_note( array $stored ): array {
+		if ( ! isset( $stored['status'], $stored['change_id'] ) || ! in_array( $stored['status'], array( 'approval_required', 'pending' ), true ) ) {
+			return $stored;
+		}
+		$change = $this->store->change( (string) $stored['change_id'] );
+		if ( null === $change || 'pending' === $change['status'] ) {
+			return $stored;
+		}
+		$status                  = (string) $change['status'];
+		$receipt                 = (string) $change['receipt_id'];
+		$stored['change_status'] = $status;
+		// The approval is no longer pending, so its link is stale.
+		unset( $stored['approve_url'] );
+		if ( '' !== $receipt ) {
+			$stored['receipt_id'] = $receipt;
+		}
+		$stored['message'] = 'approved' === $status
+			? 'This repeats the reply to the first call with this idempotency_key. The change is now approved: call apply_change with this change_id and a new idempotency_key to apply it.'
+			: sprintf(
+				'This repeats the reply to the first call with this idempotency_key. The change is now %s%s; call get_change with this change_id for its current state.',
+				'applying' === $status ? 'being applied' : $status,
+				'' === $receipt ? '' : sprintf( ' (receipt %s)', $receipt )
+			);
+		return $stored;
 	}
 
 	/**
@@ -689,31 +795,37 @@ final class Gateway {
 	 * @param array<string, mixed> $args       Arguments.
 	 * @param Assessment           $assessment Assessment.
 	 * @return array<string, mixed>
+	 * @throws ToolError When the database could not store the change set; nothing was changed.
 	 */
 	private function queue( WriteTool $tool, array $args, Assessment $assessment ): array {
 		$now       = $this->clock->now();
 		$args_json = Canonical::json( $args );
-		$change_id = $this->store->insert_change(
-			array(
-				'tool'               => $tool->name(),
-				'args_json'          => $args_json,
-				'args_hash'          => hash( 'sha256', $args_json ),
-				'requester_user_id'  => $this->identity->user_id(),
-				'client_id'          => $this->identity->client_id(),
-				'client_name'        => $this->identity->client_name(),
-				'tier'               => $assessment->tier(),
-				'summary'            => $assessment->summary(),
-				'preview_json'       => Canonical::json( Redaction::secrets( $assessment->preview() ) ),
-				'preconditions_json' => Canonical::json( $assessment->preconditions() ),
-				'status'             => 'pending',
-				'approved_by'        => 0,
-				'approved_at'        => 0,
-				'expires_at'         => $now + self::PENDING_TTL,
-				'binding'            => '',
-				'receipt_id'         => '',
-				'created_at'         => $now,
-			)
-		);
+		try {
+			$change_id = $this->store->insert_change(
+				array(
+					'tool'               => $tool->name(),
+					'args_json'          => $args_json,
+					'args_hash'          => hash( 'sha256', $args_json ),
+					'requester_user_id'  => $this->identity->user_id(),
+					'client_id'          => $this->identity->client_id(),
+					'client_name'        => $this->identity->client_name(),
+					'tier'               => $assessment->tier(),
+					'summary'            => $assessment->summary(),
+					'preview_json'       => Canonical::json( Redaction::secrets( $assessment->preview() ) ),
+					'preconditions_json' => Canonical::json( $assessment->preconditions() ),
+					'status'             => 'pending',
+					'approved_by'        => 0,
+					'approved_at'        => 0,
+					'expires_at'         => $now + self::PENDING_TTL,
+					'binding'            => '',
+					'receipt_id'         => '',
+					'created_at'         => $now,
+				)
+			);
+		} catch ( \Throwable $e ) {
+			// Only the assessment ran, which reads: nothing was changed. A ToolError frees the key for the retry.
+			throw new ToolError( esc_textarea( self::BUSY ) );
+		}//end try
 
 		return array(
 			'status'      => 'approval_required',
@@ -829,6 +941,17 @@ final class Gateway {
 					'message'     => 'Waiting for an administrator to approve it in wp-admin.',
 				);
 			case 'applied':
+				if ( self::PLAN_TOOL === $change['tool'] ) {
+					// A plan has no receipt of its own (receipt_id stays '', as before): one item's receipt would undo
+					// only that item, so each item carries its own.
+					return array(
+						'status'     => 'already_applied',
+						'change_id'  => $id,
+						'receipt_id' => '',
+						'items'      => $this->plan_receipts( $change ),
+						'message'    => 'A plan has no receipt of its own: each item in items has its own receipt_id. Roll back an item with its receipt_id.',
+					);
+				}
 				return array(
 					'status'     => 'already_applied',
 					'change_id'  => $id,
@@ -844,12 +967,46 @@ final class Gateway {
 					'status'    => 'in_progress',
 					'change_id' => $id,
 				);
+			case 'stale':
+				return array(
+					'status'    => 'stale',
+					'change_id' => $id,
+					'message'   => $this->stale_message( $change ),
+				);
 			default:
 				return array(
 					'status'    => (string) $change['status'],
 					'change_id' => $id,
 				);
 		}//end switch
+	}
+
+	/**
+	 * What a stale change means and what to do: why it went stale (the refusal of an earlier apply, from that refusal's
+	 * receipt, when there is one) and that a new approval is needed.
+	 *
+	 * @param array<string, mixed> $change Change row.
+	 * @return string
+	 */
+	private function stale_message( array $change ): string {
+		$reason   = '';
+		$refusals = $this->store->receipts(
+			array(
+				'change_id' => (string) $change['uuid'],
+				'status'    => 'refused',
+			),
+			1,
+			0
+		);
+		if ( array() !== $refusals ) {
+			$result = Canonical::decode( (string) $refusals[0]['result_json'] );
+			$reason = isset( $result['message'] ) && is_string( $result['message'] ) ? $result['message'] : '';
+		}
+		return sprintf(
+			'Nothing was changed. %s A new approval is needed: call %s again to request one.',
+			'' === $reason ? 'The change went stale when it was applied: what it changes, or a check on it, changed after it was approved.' : 'The change went stale when it was applied, because it was refused: ' . self::sentence( $reason ),
+			$change['tool']
+		);
 	}
 
 	/**
@@ -872,7 +1029,7 @@ final class Gateway {
 			$message = $e instanceof ToolError ? ToolError::plain( $e ) : self::FAILED;
 			$receipt = $this->receipt( $tool, $args, $key, $change_id, $assessment->tier(), $approval, 'failed', array( 'error' => $message ), Rollback::none() );
 			$this->finish_change( $change_id, 'failed', $receipt );
-			return array( 'error' => sprintf( '%s Receipt %s records the failure.', $message, $receipt ) );
+			return array( 'error' => sprintf( '%s Receipt %s records the failure.', self::sentence( $message ), $receipt ) );
 		}
 
 		try {
@@ -892,8 +1049,10 @@ final class Gateway {
 		if ( Rollback::is_restorable( $rollback ) ) {
 			$rollback['after'] = $outcome->after();
 		}
-		$result  = Redaction::compact( $outcome->result() );
-		$receipt = $this->receipt( $tool, $args, $key, $change_id, $assessment->tier(), $approval, $status, $result, $rollback );
+		$result = Redaction::compact( $outcome->result() );
+		// The receipt keeps the warnings in its result, so get_change and list_receipts can show them later.
+		$stored  = array() === $outcome->warnings() ? $result : $result + array( 'warnings' => Redaction::compact( $outcome->warnings() ) );
+		$receipt = $this->receipt( $tool, $args, $key, $change_id, $assessment->tier(), $approval, $status, $stored, $rollback );
 		$this->finish_change( $change_id, 'applied', $receipt );
 
 		if ( $tool instanceof RollbackTool ) {
@@ -994,13 +1153,25 @@ final class Gateway {
 	 * @param array<int, array<string, mixed>> $items Items.
 	 * @param string                           $key   Idempotency key of the plan.
 	 * @return array<string, mixed>
+	 * @throws ToolError When the database could not store a change set; nothing was changed.
+	 * @throws \Throwable Any other failure while an item is queued (a tool bug), after the items before it are withdrawn.
 	 */
 	private function queue_plan( string $title, array $items, string $key ): array {
 		$results = array();
 		$queued  = array();
 		$tier    = Risk::REVERSIBLE;
 		foreach ( array_values( $items ) as $index => $item ) {
-			$result    = $this->queue_plan_item( $item, self::item_key( $key, $index ) );
+			try {
+				$result = $this->queue_plan_item( $item, self::item_key( $key, $index ) );
+			} catch ( \Throwable $e ) {
+				// No plan holds the items before it: withdraw them. A busy database (queue_plan_item() throws BUSY) stays
+				// BUSY; anything else, such as a bug in a tool's assess(), reaches once() as the usual failure.
+				$left = $this->withdraw( array_column( $queued, 'change_id' ) );
+				if ( $e instanceof ToolError && self::BUSY === ToolError::plain( $e ) ) {
+					throw new ToolError( esc_textarea( self::busy_withdrawn( $left ) ) );
+				}
+				throw $e;
+			}
 			$results[] = $result;
 			if ( 'queued' === $result['status'] ) {
 				$queued[] = $result;
@@ -1034,28 +1205,34 @@ final class Gateway {
 				'summary'   => $result['summary'],
 			);
 		}
-		$summary   = sprintf( 1 === count( $queued ) ? '%s (%d change)' : '%s (%d changes)', $title, count( $queued ) );
-		$change_id = $this->store->insert_change(
-			array(
-				'tool'               => self::PLAN_TOOL,
-				'args_json'          => $args_json,
-				'args_hash'          => hash( 'sha256', $args_json ),
-				'requester_user_id'  => $this->identity->user_id(),
-				'client_id'          => $this->identity->client_id(),
-				'client_name'        => $this->identity->client_name(),
-				'tier'               => $tier,
-				'summary'            => $summary,
-				'preview_json'       => Canonical::json( array( 'items' => $preview ) ),
-				'preconditions_json' => Canonical::json( array() ),
-				'status'             => 'pending',
-				'approved_by'        => 0,
-				'approved_at'        => 0,
-				'expires_at'         => $now + self::PENDING_TTL,
-				'binding'            => '',
-				'receipt_id'         => '',
-				'created_at'         => $now,
-			)
-		);
+		$summary = sprintf( 1 === count( $queued ) ? '%s (%d change)' : '%s (%d changes)', $title, count( $queued ) );
+		try {
+			$change_id = $this->store->insert_change(
+				array(
+					'tool'               => self::PLAN_TOOL,
+					'args_json'          => $args_json,
+					'args_hash'          => hash( 'sha256', $args_json ),
+					'requester_user_id'  => $this->identity->user_id(),
+					'client_id'          => $this->identity->client_id(),
+					'client_name'        => $this->identity->client_name(),
+					'tier'               => $tier,
+					'summary'            => $summary,
+					'preview_json'       => Canonical::json( array( 'items' => $preview ) ),
+					'preconditions_json' => Canonical::json( array() ),
+					'status'             => 'pending',
+					'approved_by'        => 0,
+					'approved_at'        => 0,
+					'expires_at'         => $now + self::PENDING_TTL,
+					'binding'            => '',
+					'receipt_id'         => '',
+					'created_at'         => $now,
+				)
+			);
+		} catch ( \Throwable $e ) {
+			// The items are only pending requests, and nothing on the site was changed: withdraw them, so a retry with the
+			// same key starts clean and no orphan item waits for approval.
+			throw new ToolError( esc_textarea( self::busy_withdrawn( $this->withdraw( array_column( $queued, 'change_id' ) ) ) ) );
+		}//end try
 
 		return array(
 			'status'      => 'approval_required',
@@ -1071,11 +1248,51 @@ final class Gateway {
 	}
 
 	/**
+	 * Withdraws pending plan items whose plan could not be stored: they become `expired`, which reads as never applied
+	 * and can no longer be approved, so none is left pending without its plan. A refused update is tried once more.
+	 *
+	 * @param string[] $change_ids Item change UUIDs.
+	 * @return int How many are still pending.
+	 */
+	private function withdraw( array $change_ids ): int {
+		$left = 0;
+		foreach ( $change_ids as $change_id ) {
+			$change_id = (string) $change_id;
+			if ( $this->store->update_change( $change_id, array( 'status' => 'expired' ), array( 'pending' ) )
+				|| $this->store->update_change( $change_id, array( 'status' => 'expired' ), array( 'pending' ) ) ) {
+				continue;
+			}
+			$change = $this->store->change( $change_id );
+			if ( null === $change || 'pending' === $change['status'] ) {
+				++$left;
+			}
+		}
+		return $left;
+	}
+
+	/**
+	 * BUSY, and what becomes of plan items that could not be withdrawn.
+	 *
+	 * @param int $left Items still pending.
+	 * @return string
+	 */
+	private static function busy_withdrawn( int $left ): string {
+		if ( 0 === $left ) {
+			return self::BUSY;
+		}
+		return self::BUSY . ' ' . sprintf(
+			1 === $left ? '%d request queued for this plan could not be withdrawn: no app was given its change_id, and it expires unapplied in 24 hours (an administrator can also reject it in wp-admin).' : '%d requests queued for this plan could not be withdrawn: no app was given their change_ids, and they expire unapplied in 24 hours (an administrator can also reject them in wp-admin).',
+			$left
+		);
+	}
+
+	/**
 	 * Assesses and queues one plan item; never auto-applies it.
 	 *
 	 * @param mixed  $item Item.
 	 * @param string $key  Idempotency key derived for the item.
 	 * @return array<string, mixed> `status` queued, refused or invalid.
+	 * @throws ToolError When the database could not store the item or its refusal receipt; nothing was changed.
 	 */
 	private function queue_plan_item( $item, string $key ): array {
 		$name = is_array( $item ) && isset( $item['tool'] ) && is_string( $item['tool'] ) ? $item['tool'] : '';
@@ -1092,7 +1309,7 @@ final class Gateway {
 			return $invalid( 'Each item needs exactly "tool" and "arguments".' );
 		}
 		if ( ! isset( $this->tools[ $name ] ) ) {
-			return $invalid( sprintf( 'Unknown tool "%s".', $name ) );
+			return $invalid( sprintf( '"%s" is not a write tool; a plan can hold only write tools.', $name ) );
 		}
 		if ( array_key_exists( 'idempotency_key', $args ) || array_key_exists( 'dry_run', $args ) ) {
 			return $invalid( 'Item arguments may not include idempotency_key or dry_run: the plan has one idempotency_key.' );
@@ -1106,7 +1323,12 @@ final class Gateway {
 			return $invalid( ToolError::plain( $e ) );
 		}
 		if ( $assessment->is_refused() ) {
-			$refused = $this->refuse( $tool, $args, $key, $assessment, '' );
+			try {
+				$refused = $this->refuse_plan_item( $tool, $args, $key, $assessment );
+			} catch ( \Throwable $e ) {
+				// The refusal receipt could not be stored: only reads ran.
+				throw new ToolError( esc_textarea( self::BUSY ) );
+			}
 			return array(
 				'tool'   => $name,
 				'status' => 'refused',
@@ -1122,6 +1344,34 @@ final class Gateway {
 			'tier'      => $queued['tier'],
 			'summary'   => $queued['summary'],
 		);
+	}
+
+	/**
+	 * Records a plan item's refusal once: a retry of the plan after BUSY (same key, same item) reuses the receipt it
+	 * wrote the first time instead of writing it again.
+	 *
+	 * @param WriteTool            $tool       Tool.
+	 * @param array<string, mixed> $args       Item arguments.
+	 * @param string               $key        Idempotency key derived for the item.
+	 * @param Assessment           $assessment Refused assessment.
+	 * @return array{error: string}
+	 */
+	private function refuse_plan_item( WriteTool $tool, array $args, string $key, Assessment $assessment ): array {
+		$earlier = $this->store->receipts(
+			array(
+				'idempotency_key' => $key,
+				'user_id'         => $this->identity->user_id(),
+				'client_id'       => $this->identity->client_id(),
+				'tool'            => $tool->name(),
+				'status'          => 'refused',
+			),
+			1,
+			0
+		);
+		if ( array() !== $earlier && hash_equals( (string) $earlier[0]['args_hash'], Canonical::hash( $args ) ) ) {
+			return array( 'error' => sprintf( 'Refused: %s (receipt %s)', $assessment->refusal()['message'], $earlier[0]['uuid'] ) );
+		}
+		return $this->refuse( $tool, $args, $key, $assessment, '' );
 	}
 
 	/**
@@ -1185,6 +1435,36 @@ final class Gateway {
 	}
 
 	/**
+	 * Each item of a plan with its status, and its receipt when it has one.
+	 *
+	 * @param array<string, mixed> $plan Plan row.
+	 * @return array<int, array<string, string>>
+	 */
+	private function plan_receipts( array $plan ): array {
+		$items = array();
+		foreach ( self::plan_item_ids( $plan ) as $id ) {
+			$item = $this->store->change( $id );
+			if ( null === $item ) {
+				$items[] = array(
+					'change_id' => $id,
+					'status'    => 'unknown',
+				);
+				continue;
+			}
+			$entry = array(
+				'change_id' => $id,
+				'tool'      => (string) $item['tool'],
+				'status'    => (string) $item['status'],
+			);
+			if ( '' !== (string) $item['receipt_id'] ) {
+				$entry['receipt_id'] = (string) $item['receipt_id'];
+			}
+			$items[] = $entry;
+		}
+		return $items;
+	}
+
+	/**
 	 * Item change ids of a plan row.
 	 *
 	 * @param array<string, mixed> $plan Plan row.
@@ -1241,8 +1521,16 @@ final class Gateway {
 		if ( 'pending' === $change['status'] ) {
 			$view['approve_url'] = $this->policy->approve_url( (string) $change['uuid'] );
 		}
+		if ( 'stale' === $change['status'] ) {
+			$view['message'] = $this->stale_message( $change );
+		}
 		if ( '' !== (string) $change['receipt_id'] ) {
 			$view['receipt_id'] = $change['receipt_id'];
+			$receipt            = $this->store->receipt( (string) $change['receipt_id'] );
+			$warnings           = null === $receipt ? null : self::stored_warnings( Canonical::decode( (string) $receipt['result_json'] ) );
+			if ( null !== $warnings ) {
+				$view['warnings'] = $warnings;
+			}
 		}
 		if ( self::PLAN_TOOL === $change['tool'] ) {
 			$view['items'] = array();
@@ -1263,13 +1551,43 @@ final class Gateway {
 	}
 
 	/**
-	 * Public view of a receipt: redacted arguments and result, rollback type only.
+	 * A message as a sentence: a full stop added when it has no closing punctuation (REST messages often have none).
 	 *
-	 * @param array<string, mixed> $row Receipt row.
+	 * @param string $message Message.
+	 * @return string
+	 */
+	private static function sentence( string $message ): string {
+		$message = rtrim( $message );
+		return '' === $message || in_array( substr( $message, -1 ), array( '.', '!', '?' ), true ) ? $message : $message . '.';
+	}
+
+	/**
+	 * Public view of a receipt: redacted arguments and result, rollback type only (not available once rolled back).
+	 *
+	 * @param array<string, mixed> $row             Receipt row.
+	 * @param string               $rollback_status Status of the receipt that rolled it back, '' if none or unknown.
 	 * @return array<string, mixed>
 	 */
-	public static function receipt_view( array $row ): array {
-		return array(
+	public static function receipt_view( array $row, string $rollback_status = '' ): array {
+		$result   = Canonical::decode( $row['result_json'] );
+		$warnings = self::stored_warnings( $result );
+		if ( null !== $warnings ) {
+			unset( $result['warnings'] );
+		}
+		$rollback = Rollback::public_view( Canonical::decode( $row['rollback_json'] ) );
+		if ( '' !== (string) $row['rolled_back_by'] ) {
+			// rollback_change refuses a receipt that was already rolled back, so it is not offered.
+			$rollback['available'] = false;
+			$rollback['reason']    = sprintf( 'Already rolled back by receipt %s.', $row['rolled_back_by'] );
+			$ended                 = array(
+				'applied_with_warnings' => 'with warnings',
+				'verification_failed'   => 'with a failed verification',
+			);
+			if ( isset( $ended[ $rollback_status ] ) ) {
+				$rollback['reason'] = sprintf( 'Already rolled back by receipt %s, which ended %s, so the restore may be partial; see that receipt.', $row['rolled_back_by'], $ended[ $rollback_status ] );
+			}
+		}
+		$view = array(
 			'receipt_id'     => $row['uuid'],
 			'change_id'      => $row['change_id'],
 			'tool'           => $row['tool'],
@@ -1279,12 +1597,27 @@ final class Gateway {
 			'user_id'        => (int) $row['user_id'],
 			'client_name'    => $row['client_name'],
 			'args'           => Canonical::decode( $row['args_json'] ),
-			'result'         => Canonical::decode( $row['result_json'] ),
-			'rollback'       => Rollback::public_view( Canonical::decode( $row['rollback_json'] ) ),
+			'result'         => $result,
+			'rollback'       => $rollback,
 			'rolls_back'     => $row['rolls_back'],
 			'rolled_back_by' => $row['rolled_back_by'],
 			'created_at'     => self::time( (int) $row['created_at'] ),
 		);
+		if ( null !== $warnings ) {
+			$view['warnings'] = $warnings;
+		}
+		return $view;
+	}
+
+	/**
+	 * The warnings an apply stored in its receipt's result, as apply_change returned them (redacted), or null for a
+	 * receipt without any (also every receipt stored before warnings were kept).
+	 *
+	 * @param mixed $result Decoded result_json.
+	 * @return array<int, mixed>|null
+	 */
+	private static function stored_warnings( $result ): ?array {
+		return is_array( $result ) && isset( $result['warnings'] ) && is_array( $result['warnings'] ) ? $result['warnings'] : null;
 	}
 
 	/**

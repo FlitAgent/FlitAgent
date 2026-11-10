@@ -8,6 +8,8 @@
 namespace FlitAgent\Writes\Ops;
 
 use FlitAgent\Mcp\ToolError;
+use FlitAgent\Writes\Buffers;
+use FlitAgent\Writes\AdminCode;
 use FlitAgent\Writes\Assessment;
 use FlitAgent\Writes\Definition;
 use FlitAgent\Writes\Outcome;
@@ -272,13 +274,14 @@ final class PluginActivation implements WriteTool, Reversible {
 	 * @throws ToolError When the plugin's code threw or WordPress refused.
 	 */
 	private function set_active( string $plugin, bool $activate ): array {
+		AdminCode::load();
 		$level = ob_get_level();
+		// activate_plugin() buffers what the plugin prints; deactivate_plugins() does not, so its hooks print here.
+		ob_start();
 		try {
 			$result = $activate ? activate_plugin( $plugin, '', false, false ) : deactivate_plugins( $plugin, false, false );
 		} catch ( \Throwable $e ) {
-			while ( ob_get_level() > $level ) {
-				ob_end_clean();
-			}
+			Buffers::discard( $level );
 			throw new ToolError(
 				sprintf(
 					'%s plugin %s failed with %s: %s. The plugin %s; code that ran before the error may have changed data.',
@@ -290,12 +293,16 @@ final class PluginActivation implements WriteTool, Reversible {
 				)
 			);
 		}
+		$printed = '' !== trim( Buffers::discard( $level ) );
 
 		if ( is_wp_error( $result ) ) {
 			if ( 'unexpected_output' === $result->get_error_code() ) {
 				return array( 'unexpected_output' => 'The plugin printed output while activating (often a PHP notice or warning); it is active. Check the site for errors.' );
 			}
 			throw new ToolError( sprintf( 'WordPress did not %s plugin %s: %s', $activate ? 'activate' : 'deactivate', esc_textarea( $plugin ), esc_textarea( ErrorText::clean( $result->get_error_message() ) ) ) );
+		}
+		if ( $printed ) {
+			return array( 'unexpected_output' => sprintf( 'The plugin printed output while %s (often a PHP notice or warning), which was discarded. Check the site for errors.', $activate ? 'activating' : 'deactivating' ) );
 		}
 		return array();
 	}

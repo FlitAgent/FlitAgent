@@ -36,6 +36,26 @@ final class Comments {
 	);
 
 	/**
+	 * Each status as a summary says it.
+	 */
+	const STATUS_WORDS = array(
+		'approved'   => 'approved',
+		'unapproved' => 'pending',
+		'spam'       => 'spam',
+		'trash'      => 'trashed',
+	);
+
+	/**
+	 * A status in plain words: "trashed", not "trash".
+	 *
+	 * @param string $status Status (a key of APPROVED_VALUES).
+	 * @return string
+	 */
+	public static function status_word( string $status ): string {
+		return self::STATUS_WORDS[ $status ] ?? $status;
+	}
+
+	/**
 	 * Whether trashing keeps comments in the trash. When EMPTY_TRASH_DAYS is 0, wp_trash_comment() deletes permanently.
 	 */
 	public static function trash_enabled(): bool {

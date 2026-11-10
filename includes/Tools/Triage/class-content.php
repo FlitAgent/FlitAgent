@@ -301,7 +301,7 @@ final class Content {
 				'thin_content:' . $post['id'],
 				'info',
 				SiteText::message( '"%s" is short', $post['title'] ),
-				sprintf( 'It has %d words. Pages under %d words rarely rank; expand it, merge it into a related page, or leave it if it is meant to be short (a contact page, for example).', $words, self::THIN_WORDS ),
+				sprintf( 'It has %d %s. Pages under %d words rarely rank; expand it, merge it into a related page, or leave it if it is meant to be short (a contact page, for example).', $words, 1 === $words ? 'word' : 'words', self::THIN_WORDS ),
 				null
 			);
 		}

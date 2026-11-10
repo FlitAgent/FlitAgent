@@ -154,7 +154,9 @@ final class Meta {
 		}
 
 		return Assessment::reversible(
-			sprintf( 'Restore user meta %s of user %d "%s" (%s).', $key, $user_id, $user->user_login, Summary::count( count( $restored ), 'value', 'values' ) ),
+			array() === $restored
+				? sprintf( 'Remove user meta %s of user %d "%s"; it did not exist before the change.', $key, $user_id, $user->user_login )
+				: sprintf( 'Restore user meta %s of user %d "%s" (%s).', $key, $user_id, $user->user_login, Summary::count( count( $restored ), 'value', 'values' ) ),
 			array(
 				'user_id'  => $user_id,
 				'key'      => $key,

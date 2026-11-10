@@ -37,7 +37,7 @@ final class ListFiles extends FileTool {
 		return array(
 			'name'         => $this->name(),
 			'title'        => 'List theme or plugin files with FlitAgent',
-			'description'  => 'From the FlitAgent WordPress plugin: lists files and directories in the active theme, its parent theme, or the themes, plugins or mu-plugins directory, sorted, with paths relative to the root, sizes, and whether read_file can read each file. Filter with a glob pattern (e.g. "*.php" or "templates/*.html") and page with limit and offset. Hidden files, vendor, node_modules, symbolic links and secret files (wp-config, keys, databases, backups, archives, logs) are left out. Requires an administrator login.',
+			'description'  => 'From the FlitAgent WordPress plugin: lists files and directories in the active theme, its parent theme, or the themes, plugins or mu-plugins directory, sorted, with paths relative to the root, sizes, and whether read_file can read each file. Filter with a glob pattern ("*.php" matches names at any depth; a pattern with "/", such as "templates/*.html", matches the path from the root) and page with limit and offset. Hidden files, vendor, node_modules, symbolic links and secret files (wp-config, keys, databases, backups, archives, logs) are left out. Requires an administrator login.',
 			'inputSchema'  => array(
 				'type'                 => 'object',
 				'properties'           => array(
@@ -49,7 +49,7 @@ final class ListFiles extends FileTool {
 					'pattern'   => array(
 						'type'        => 'string',
 						'maxLength'   => 200,
-						'description' => 'Glob on the path relative to the root, e.g. "*.php" (top level), "*/*.php" or "templates/*.html". "*" does not cross "/".',
+						'description' => 'Glob, case-insensitive. Without "/" it matches the file or directory name at any depth, e.g. "*.php" or "header.*". With "/" it matches the whole path relative to the root (not to path), and "*" does not cross "/", e.g. "templates/*.html".',
 					),
 					'recursive' => array(
 						'type'    => 'boolean',
@@ -141,7 +141,7 @@ final class ListFiles extends FileTool {
 			$directory,
 			$recursive,
 			static function ( string $path, string $real, bool $is_dir ) use ( &$entries, $pattern ): bool {
-				if ( null === $pattern || fnmatch( $pattern, $path, FNM_PATHNAME | FNM_CASEFOLD ) ) {
+				if ( null === $pattern || self::pattern_matches( $pattern, $path ) ) {
 					$entries[] = array(
 						'path'     => $path,
 						'type'     => $is_dir ? 'directory' : 'file',
@@ -173,6 +173,23 @@ final class ListFiles extends FileTool {
 			'next_offset' => $next,
 			'truncated'   => $truncated,
 		);
+	}
+
+	/**
+	 * Whether a path relative to the root matches a glob: a pattern without "/" is matched against the name alone (at
+	 * any depth), one with "/" against the whole relative path, where "*" does not cross "/". Case-insensitive.
+	 *
+	 * @param string $pattern Glob.
+	 * @param string $path    Path relative to the root.
+	 * @return bool
+	 */
+	public static function pattern_matches( string $pattern, string $path ): bool {
+		if ( false === strpos( $pattern, '/' ) ) {
+			// The part after the last "/", split by hand: basename() depends on the locale and can cut multibyte names.
+			$slash = strrpos( $path, '/' );
+			return fnmatch( $pattern, false === $slash ? $path : substr( $path, $slash + 1 ), FNM_CASEFOLD );
+		}
+		return fnmatch( $pattern, $path, FNM_PATHNAME | FNM_CASEFOLD );
 	}
 
 	/**

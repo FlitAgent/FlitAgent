@@ -14,6 +14,7 @@ use FlitAgent\Writes\Definition;
 use FlitAgent\Writes\Outcome;
 use FlitAgent\Writes\Risk;
 use FlitAgent\Writes\Rollback;
+use FlitAgent\Writes\Summary;
 use FlitAgent\Writes\WriteTool;
 
 defined( 'ABSPATH' ) || exit;
@@ -108,7 +109,7 @@ final class DeleteUser implements WriteTool {
 		$counts = Site::post_counts( $user_id );
 		$roles  = Privilege::roles_of( Site::caps_of( $user ), Site::roles() );
 		return Assessment::destructive(
-			sprintf( 'Delete user %d "%s" (%s, role %s) permanently and give their %d posts to user %d "%s". This cannot be rolled back.', $user_id, $user->user_login, $user->user_email, Site::listing( $roles ), array_sum( $counts ), $reassign, $heir->user_login ),
+			sprintf( 'Delete user %d "%s" (%s, role %s) permanently and give their %s to user %d "%s". This cannot be rolled back.', $user_id, $user->user_login, $user->user_email, Site::listing( $roles ), Summary::count( array_sum( $counts ), 'post', 'posts' ), $reassign, $heir->user_login ),
 			array(
 				'user_id'     => $user_id,
 				'before'      => array(

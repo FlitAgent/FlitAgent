@@ -14,6 +14,7 @@ use FlitAgent\Writes\Outcome;
 use FlitAgent\Writes\Reversible;
 use FlitAgent\Writes\Risk;
 use FlitAgent\Writes\Rollback;
+use FlitAgent\Writes\Summary;
 use FlitAgent\Writes\WriteTool;
 
 defined( 'ABSPATH' ) || exit;
@@ -94,7 +95,7 @@ final class DeleteMenu implements WriteTool, Reversible {
 		$locations = isset( $menu['locations'] ) ? (array) $menu['locations'] : array();
 
 		return Assessment::destructive(
-			sprintf( 'Delete menu "%s" (%d) with its %d items%s.', $menu['name'], $id, count( $items ), array() === $locations ? '' : '; it disappears from ' . implode( ', ', $locations ) ),
+			sprintf( 'Delete menu "%s" (%d) with its %s%s.', $menu['name'], $id, Summary::count( count( $items ), 'item', 'items' ), array() === $locations ? '' : '; it disappears from ' . implode( ', ', $locations ) ),
 			array(
 				'before' => array(
 					'menu'      => (string) $menu['name'],
@@ -137,7 +138,7 @@ final class DeleteMenu implements WriteTool, Reversible {
 				Rollback::SNAPSHOT,
 				'menu',
 				$id,
-				array(),
+				ThemeBound::refs(),
 				array(
 					'name'        => (string) $menu['name'],
 					'description' => isset( $menu['description'] ) ? (string) $menu['description'] : '',
@@ -181,9 +182,15 @@ final class DeleteMenu implements WriteTool, Reversible {
 		}
 		$items     = isset( $before['items'] ) ? (array) $before['items'] : array();
 		$locations = isset( $before['locations'] ) ? (array) $before['locations'] : array();
+		$had       = array() !== $locations;
+		$left_out  = '';
+		if ( array() !== $locations && ! ThemeBound::active( $rollback ) ) {
+			$left_out  = sprintf( 1 === count( $locations ) ? ' Its location %s was on %s, so it is not restored.' : ' Its locations %s were on %s, so they are not restored.', Summary::join( $locations ), self::other_theme( $rollback ) );
+			$locations = array();
+		}
 
 		return Assessment::destructive(
-			sprintf( 'Re-create menu "%s" with %d items%s (new ids).', $name, count( $items ), array() === $locations ? '' : ' in ' . implode( ', ', $locations ) ),
+			sprintf( 'Re-create menu "%s" with %s%s (new ids).', $name, Summary::count( count( $items ), 'item', 'items' ), array() === $locations ? '' : ' in ' . implode( ', ', $locations ) ) . $left_out,
 			array(
 				'current'  => array( 'menu' => '(deleted)' ),
 				'restored' => array(
@@ -192,8 +199,21 @@ final class DeleteMenu implements WriteTool, Reversible {
 					'locations' => implode( ', ', $locations ),
 				),
 			),
-			array( 'fingerprint' => Menus::menu_fingerprint( $id ) )
+			// What the rollback does with the locations depends on the active theme, so a switch makes it stale; a menu
+			// that had no locations does not depend on it.
+			array( 'fingerprint' => Menus::menu_fingerprint( $id ) ) + ( $had ? array( 'theme' => ThemeBound::current() ) : array() )
 		);
+	}
+
+	/**
+	 * The theme the menu was deleted on, as a summary names it.
+	 *
+	 * @param array<string, mixed> $rollback Rollback reference.
+	 * @return string
+	 */
+	private static function other_theme( array $rollback ): string {
+		$theme = ThemeBound::theme( $rollback );
+		return '' === $theme ? 'a theme this receipt does not record' : sprintf( 'the theme %s, which is no longer the active theme', $theme );
 	}
 
 	/**
@@ -210,8 +230,10 @@ final class DeleteMenu implements WriteTool, Reversible {
 		}
 		$before     = (array) $rollback['before'];
 		$registered = Menus::locations();
-		$locations  = array_values( array_intersect( (array) $before['locations'], array_keys( $registered ) ) );
-		$menu       = Rest::write(
+		// Locations belong to the theme the menu was deleted on; another theme's locations are left alone.
+		$on_theme  = ThemeBound::active( $rollback );
+		$locations = $on_theme ? array_values( array_intersect( (array) $before['locations'], array_keys( $registered ) ) ) : array();
+		$menu      = Rest::write(
 			'POST',
 			'/wp/v2/menus',
 			array(
@@ -220,7 +242,7 @@ final class DeleteMenu implements WriteTool, Reversible {
 				'locations'   => $locations,
 			)
 		);
-		$menu_id    = isset( $menu['id'] ) ? (int) $menu['id'] : 0;
+		$menu_id   = isset( $menu['id'] ) ? (int) $menu['id'] : 0;
 		if ( $menu_id <= 0 ) {
 			throw new ToolError( 'WordPress did not return the re-created menu.' );
 		}
@@ -232,8 +254,10 @@ final class DeleteMenu implements WriteTool, Reversible {
 				return (int) $a['menu_order'] <=> (int) $b['menu_order'];
 			}
 		);
-		$new_ids = array();
-		$failed  = 0;
+		$new_ids   = array();
+		$failed    = 0;
+		$reasons   = array();
+		$unordered = 0;
 		do {
 			$progress = false;
 			foreach ( $pending as $old_id => $fields ) {
@@ -246,15 +270,16 @@ final class DeleteMenu implements WriteTool, Reversible {
 				$fields['menus']  = $menu_id;
 				$fields['parent'] = isset( $new_ids[ $parent ] ) ? $new_ids[ $parent ] : 0;
 				try {
-					$created            = Rest::write( 'POST', '/wp/v2/menu-items', $fields );
-					$new_ids[ $old_id ] = (int) $created['id'];
+					list( $new_ids[ $old_id ], $ordered ) = Menus::create_item( $fields );
+					$unordered                           += $ordered ? 0 : 1;
 				} catch ( ToolError $e ) {
 					++$failed;
+					$reasons[ rtrim( ToolError::plain( $e ), '.' ) ] = true;
 				}
 			}
 		} while ( $progress && array() !== $pending );
 
-		$outcome = new Outcome(
+		$outcome  = new Outcome(
 			array(
 				'menu_id'        => $menu_id,
 				'items_restored' => count( $new_ids ),
@@ -262,8 +287,23 @@ final class DeleteMenu implements WriteTool, Reversible {
 			),
 			Rollback::none()
 		);
-		if ( $failed > 0 || count( $locations ) !== count( (array) $before['locations'] ) ) {
-			$outcome = $outcome->with_warning( 'partly_restored', sprintf( '%d items could not be re-created (their target may be gone) and %d locations are no longer registered.', $failed, count( (array) $before['locations'] ) - count( $locations ) ) );
+		$gone     = $on_theme ? count( (array) $before['locations'] ) - count( $locations ) : 0;
+		$problems = array();
+		if ( $failed > 0 ) {
+			$problems[] = Summary::count( $failed, 'item', 'items' ) . ' could not be re-created (' . implode( '; ', array_keys( $reasons ) ) . ')';
+		}
+		if ( $unordered > 0 ) {
+			$problems[] = Summary::count( $unordered, 'item', 'items' ) . ( 1 === $unordered ? ' could not be put back at its menu order, so it is' : ' could not be put back at their menu order, so they are' ) . ' at menu order 1';
+		}
+		if ( 0 !== $gone ) {
+			$problems[] = Summary::count( $gone, 'location is', 'locations are' ) . ' no longer registered';
+		}
+		$skipped = (array) $before['locations'];
+		if ( ! $on_theme && array() !== $skipped ) {
+			$problems[] = sprintf( 1 === count( $skipped ) ? 'the menu location %s was not restored: it was on %s' : 'the menu locations %s were not restored: they were on %s', Summary::join( $skipped ), self::other_theme( $rollback ) );
+		}
+		if ( array() !== $problems ) {
+			$outcome = $outcome->with_warning( 'partly_restored', ucfirst( Summary::join( $problems ) ) . '.' );
 		}
 		return $outcome;
 	}

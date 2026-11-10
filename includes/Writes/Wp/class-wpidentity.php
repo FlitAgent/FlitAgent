@@ -45,4 +45,11 @@ final class WpIdentity implements Identity {
 	public function can_write(): bool {
 		return Context::current()->allows_writes() && current_user_can( 'manage_options' );
 	}
+
+	/**
+	 * The protected-tool gate alone: a read-scoped app may still read changes and receipts.
+	 */
+	public function can_review(): bool {
+		return current_user_can( 'manage_options' );
+	}
 }

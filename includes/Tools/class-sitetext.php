@@ -66,10 +66,8 @@ final class SiteText {
 		'get_elementor_page'          => array( 'elements' ),
 		'get_bricks_page'             => array( 'elements' ),
 		'get_breakdance_page'         => array( 'tree' ),
-		'get_beaver_page'             => array( 'nodes' ),
 		'get_elementor_widget_schema' => array( 'default', 'options', 'condition', 'conditions' ),
 		'get_elementor_style_schema'  => array( 'default', 'options' ),
-		'get_beaver_module_schema'    => array( 'default', 'defaults', 'options' ),
 	);
 
 	/**
@@ -107,8 +105,6 @@ final class SiteText {
 		'get_elementor_style_schema'  => array( 'name', 'type' ),
 		'list_bricks_elements'        => array( 'name' ),
 		'list_breakdance_elements'    => array( 'type' ),
-		'list_beaver_modules'         => array( 'slug' ),
-		'get_beaver_module_schema'    => array( 'slug', 'name', 'type' ),
 	);
 
 	/**

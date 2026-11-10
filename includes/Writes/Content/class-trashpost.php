@@ -75,7 +75,7 @@ final class TrashPost implements WriteTool, Reversible {
 	 * @return Assessment
 	 */
 	public function assess( array $args ): Assessment {
-		return Trashing::assess_trash( (int) $args['post_id'], 'Move to the trash', false );
+		return Trashing::assess_trash( (int) $args['post_id'], 'Move %s to the trash', false );
 	}
 
 	/**

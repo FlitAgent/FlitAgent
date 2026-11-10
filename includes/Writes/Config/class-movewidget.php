@@ -144,7 +144,7 @@ final class MoveWidget implements WriteTool, Reversible {
 				Rollback::SNAPSHOT,
 				'widget',
 				$id,
-				array( 'sidebar' => $from['sidebar'] ),
+				array( 'sidebar' => $from['sidebar'] ) + ThemeBound::refs(),
 				array( 'widgets' => isset( $sidebars[ $from['sidebar'] ] ) ? $sidebars[ $from['sidebar'] ] : array() )
 			),
 			array( 'fingerprint' => Widgets::fingerprint( $id ) )
@@ -170,7 +170,11 @@ final class MoveWidget implements WriteTool, Reversible {
 	 * @return Assessment
 	 */
 	public function assess_rollback( array $rollback ): Assessment {
-		$id     = isset( $rollback['target']['id'] ) ? (string) $rollback['target']['id'] : '';
+		$id      = isset( $rollback['target']['id'] ) ? (string) $rollback['target']['id'] : '';
+		$refusal = ThemeBound::refusal( $rollback );
+		if ( null !== $refusal ) {
+			return $refusal;
+		}
 		$widget = Widgets::editable( $id, false );
 		if ( $widget instanceof Assessment ) {
 			return $widget;
@@ -180,7 +184,7 @@ final class MoveWidget implements WriteTool, Reversible {
 		if ( ! isset( $sidebars[ $sidebar ] ) ) {
 			return Assessment::prohibited( 'not_found', sprintf( 'Sidebar %s no longer exists.', $sidebar ) );
 		}
-		$list  = array_values( array_map( 'strval', (array) $rollback['before']['widgets'] ) );
+		$list  = self::restored_list( $sidebars[ $sidebar ], $id, (array) $rollback['before']['widgets'] );
 		$place = Widgets::place( $sidebars, $id );
 		$back  = (int) array_search( $id, $list, true ) + 1;
 		if ( $sidebar === $place['sidebar'] && $back === $place['position'] ) {
@@ -196,7 +200,7 @@ final class MoveWidget implements WriteTool, Reversible {
 				'current'  => array_map( 'strval', Widgets::place( $sidebars, $id ) ),
 				'restored' => array(
 					'sidebar'  => $sidebar,
-					'position' => (string) ( (int) array_search( $id, $list, true ) + 1 ),
+					'position' => (string) $back,
 				),
 			),
 			array( 'fingerprint' => Widgets::fingerprint( $id ) ),
@@ -205,7 +209,9 @@ final class MoveWidget implements WriteTool, Reversible {
 	}
 
 	/**
-	 * Puts the old sidebar's list back, if the widgets are still as assessed.
+	 * Moves the widget back into its old sidebar, if the widgets are still as assessed. Only this widget moves: the
+	 * sidebar keeps its current widgets (a widget deleted since is not put back, one added since stays), and the widget
+	 * goes next to the neighbours it had before the move.
 	 *
 	 * @param array<string, mixed> $rollback       Rollback reference.
 	 * @param array<string, mixed> $expected_state Preconditions of the rollback assessment.
@@ -217,8 +223,12 @@ final class MoveWidget implements WriteTool, Reversible {
 		if ( Widgets::fingerprint( $id ) !== ( $expected_state['fingerprint'] ?? '' ) ) {
 			throw new ToolError( sprintf( 'The widgets changed after the rollback was assessed; widget %s was not moved back.', esc_textarea( $id ) ) );
 		}
-		$sidebar = (string) $rollback['refs']['sidebar'];
-		Rest::write( 'PUT', '/wp/v2/sidebars/' . rawurlencode( $sidebar ), array( 'widgets' => array_values( (array) $rollback['before']['widgets'] ) ) );
+		$sidebar  = (string) $rollback['refs']['sidebar'];
+		$sidebars = Widgets::sidebars();
+		if ( ! isset( $sidebars[ $sidebar ] ) ) {
+			throw new ToolError( sprintf( 'Sidebar %s no longer exists; widget %s was not moved back.', esc_textarea( $sidebar ), esc_textarea( $id ) ) );
+		}
+		Rest::write( 'PUT', '/wp/v2/sidebars/' . rawurlencode( $sidebar ), array( 'widgets' => self::restored_list( $sidebars[ $sidebar ], $id, (array) $rollback['before']['widgets'] ) ) );
 		return new Outcome(
 			array(
 				'widget_id' => $id,
@@ -226,6 +236,36 @@ final class MoveWidget implements WriteTool, Reversible {
 			),
 			Rollback::none()
 		);
+	}
+
+	/**
+	 * A sidebar's current widgets with one widget put back where it was: after the nearest widget that came before it
+	 * in the old list and is still in the sidebar, else before the nearest one that came after it, else at its old
+	 * position (at most the end). Nothing else in the list changes, so no deleted widget comes back.
+	 *
+	 * @param string[] $current Widget ids now in the sidebar.
+	 * @param string   $id      Widget to put back.
+	 * @param mixed[]  $old     The sidebar's widget ids before the move.
+	 * @return string[]
+	 */
+	private static function restored_list( array $current, string $id, array $old ): array {
+		$list  = array_values( array_diff( array_map( 'strval', $current ), array( $id ) ) );
+		$old   = array_values( array_map( 'strval', $old ) );
+		$index = array_search( $id, $old, true );
+		$index = false === $index ? count( $old ) : (int) $index;
+
+		$at = null;
+		for ( $i = $index - 1; $i >= 0 && null === $at; --$i ) {
+			$found = array_search( $old[ $i ], $list, true );
+			$at    = false === $found ? null : (int) $found + 1;
+		}
+		$total = count( $old );
+		for ( $i = $index + 1; $i < $total && null === $at; ++$i ) {
+			$found = array_search( $old[ $i ], $list, true );
+			$at    = false === $found ? null : (int) $found;
+		}
+		array_splice( $list, null === $at ? min( $index, count( $list ) ) : $at, 0, array( $id ) );
+		return $list;
 	}
 
 	/**

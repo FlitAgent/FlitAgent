@@ -42,7 +42,7 @@ final class Output {
 	}
 
 	/**
-	 * Converts objects (e.g. Beaver Builder's stdClass nodes) to arrays, at any depth.
+	 * Converts objects (e.g. stdClass nodes) to arrays, at any depth.
 	 *
 	 * @param mixed $value Value.
 	 * @return mixed

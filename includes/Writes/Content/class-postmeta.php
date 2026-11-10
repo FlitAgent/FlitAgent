@@ -10,6 +10,8 @@ namespace FlitAgent\Writes\Content;
 use FlitAgent\Mcp\ToolError;
 use FlitAgent\Tools\Redactor;
 use FlitAgent\Writes\Assessment;
+use FlitAgent\Writes\Builders\BreakdanceEngine;
+use FlitAgent\Writes\Builders\BricksEngine;
 use FlitAgent\Writes\Canonical;
 use FlitAgent\Writes\Outcome;
 use FlitAgent\Writes\Rollback;
@@ -27,6 +29,44 @@ final class PostMeta {
 	 * Page-builder layout and settings keys (builder saves are a separate package).
 	 */
 	const BUILDER_KEYS = '/^(_elementor|_bricks|_breakdance|breakdance_|_oxygen|ct_builder|_fl_builder|fl_builder)/i';
+
+	/**
+	 * Builders among BUILDER_KEYS that FlitAgent has layout tools for: key pattern => builder name and its save tools.
+	 * The refusal names the tools for the keys they write (layout_keys()) and says the builder's other keys are not
+	 * written at all.
+	 */
+	const TOOL_KEYS = array(
+		'/^_elementor/i'                        => array( 'Elementor', array( 'save_elementor_page', 'save_elementor_template' ) ),
+		'/^_bricks/i'                           => array( 'Bricks', array( 'save_bricks_page' ) ),
+		'/^(_breakdance|breakdance_|_oxygen)/i' => array( 'Breakdance or Oxygen 6', array( 'save_breakdance_page' ) ),
+	);
+
+	/**
+	 * Builders among BUILDER_KEYS that FlitAgent has no layout tools for, by name: their refusal says so. Oxygen 6 runs
+	 * on Breakdance and keeps its layout in `_oxygen_` keys, which save_breakdance_page writes; classic Oxygen's
+	 * `ct_builder` keys have no tool.
+	 */
+	const NO_TOOL_KEYS = array(
+		'Beaver Builder' => '/^_?fl_builder/i',
+		'classic Oxygen' => '/^ct_builder/i',
+	);
+
+	/**
+	 * The meta keys a builder's save tools write (their SaveLayout::meta_keys()).
+	 *
+	 * @param string $builder Builder name from TOOL_KEYS.
+	 * @return string[]
+	 */
+	private static function layout_keys( string $builder ): array {
+		switch ( $builder ) {
+			case 'Elementor':
+				return array( '_elementor_data', '_elementor_edit_mode', '_elementor_template_type', '_elementor_version' );
+			case 'Bricks':
+				return array( BricksEngine::content_key(), BricksEngine::mode_key() );
+			default:
+				return array( BreakdanceEngine::data_key() );
+		}
+	}
 
 	/**
 	 * The `key` property.
@@ -86,6 +126,33 @@ final class PostMeta {
 		if ( Redactor::is_secret_key( $key ) ) {
 			return Assessment::prohibited( 'protected_meta', sprintf( 'Meta key %s looks like it holds a secret, so FlitAgent does not write it.', $key ) );
 		}
+		foreach ( self::NO_TOOL_KEYS as $builder => $pattern ) {
+			if ( 1 === preg_match( $pattern, $key ) ) {
+				return Assessment::prohibited( 'protected_meta', sprintf( 'Meta key %1$s holds %2$s layout or settings. FlitAgent does not edit %2$s layouts, so it does not write it.', $key, $builder ) );
+			}
+		}
+		foreach ( self::TOOL_KEYS as $pattern => $tool ) {
+			if ( 1 !== preg_match( $pattern, $key ) ) {
+				continue;
+			}
+			list( $builder, $tools ) = $tool;
+			$layout                  = self::layout_keys( $builder );
+			if ( in_array( $key, $layout, true ) ) {
+				return Assessment::prohibited( 'protected_meta', sprintf( 'Meta key %s holds the %s layout; it is only written through %s.', $key, $builder, implode( ' or ', $tools ) ) );
+			}
+			return Assessment::prohibited(
+				'protected_meta',
+				sprintf(
+					'Meta key %s holds %s settings or generated data, which FlitAgent does not write. %s %s only its layout %s: %s.',
+					$key,
+					$builder,
+					Summary::join( $tools ),
+					1 === count( $tools ) ? 'writes' : 'write',
+					1 === count( $layout ) ? 'key' : 'keys',
+					Summary::join( $layout )
+				)
+			);
+		}//end foreach
 		if ( 1 === preg_match( self::BUILDER_KEYS, $key ) ) {
 			return Assessment::prohibited( 'protected_meta', sprintf( 'Meta key %s holds page-builder layout or settings; it is only written through the page-builder tools.', $key ) );
 		}
@@ -295,7 +362,9 @@ final class PostMeta {
 		$current  = self::values( $post_id, $key );
 		$restored = self::snapshot( $rollback );
 		return Assessment::reversible(
-			sprintf( 'Restore meta key %s of %s to its %s.', $key, Posts::name( $post ), Summary::count( count( $restored ), 'previous value', 'previous values' ) ) . Posts::live_note( $post ),
+			( array() === $restored
+				? sprintf( 'Remove meta key %s from %s; it did not exist before the change.', $key, Posts::name( $post ) )
+				: sprintf( 'Restore meta key %s of %s to its %s.', $key, Posts::name( $post ), Summary::count( count( $restored ), 'previous value', 'previous values' ) ) ) . Posts::live_note( $post ),
 			array(
 				'post_id'  => $post_id,
 				'key'      => $key,

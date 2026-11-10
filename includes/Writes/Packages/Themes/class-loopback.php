@@ -50,6 +50,9 @@ final class Loopback {
 				'reject_unsafe_urls'  => true,
 				'limit_response_size' => self::MAX_BYTES,
 				'cookies'             => array(),
+				// TLS verified as core's own loopback requests do it (off by default, so a self-signed certificate works).
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core's own loopback filter, applied as core's loopback requests apply it.
+				'sslverify'           => apply_filters( 'https_local_ssl_verify', false, $url ),
 				'headers'             => array( 'Accept' => 'text/html,application/xhtml+xml,*/*;q=0.8' ),
 				'user-agent'          => 'FlitAgent/' . ( defined( 'FLITAGENT_VERSION' ) ? FLITAGENT_VERSION : '0' ) . ' (theme package check)',
 			)
