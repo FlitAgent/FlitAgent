@@ -14,6 +14,8 @@ Let AI assistants such as Claude and ChatGPT work on your site through typed too
 
 FlitAgent lets Claude, ChatGPT and other AI apps work on your WordPress site, and nothing changes until you approve it, unless you turn on auto-approve for a low-risk tool. Ask in plain words for a health check, a content fix or a plugin update. The AI proposes the change, you see a before-and-after preview in wp-admin, and you approve or reject it. Every change gets a receipt, and most can be rolled back.
 
+https://youtu.be/8ZzbH-L3ubA
+
 FlitAgent works together with the flitagent.com service and needs a free flitagent.com account. The Free plan includes 100 tool calls a day; paid plans raise the daily limit (see the FAQ).
 
 = An MCP server for WordPress =
